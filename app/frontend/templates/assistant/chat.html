@@ -1,0 +1,33 @@
+{% extends 'base.html' %}
+
+{% block title %}Chat - Assistente Clínico{% endblock %}
+
+{% block content %}
+<div class="chat-container">
+    <div id="chat-feed" class="chat-feed">
+        <!-- Mensagem de Boas-Vindas Inicial -->
+        <div class="chat-bubble assistant">
+            <div class="avatar"><i class="bi bi-robot"></i></div>
+            <div class="message-content">
+                Olá! Sou o seu Assistente Clínico. Como posso ajudar com o seu agendamento hoje?
+            </div>
+        </div>
+    </div>
+
+    <!-- Campo de Entrada HTMX -->
+    <div class="chat-input-container">
+        <form id="chat-form" 
+              class="chat-form"
+              hx-post="{% url 'chat' %}" 
+              hx-target="#chat-feed" 
+              hx-swap="beforeend"
+              hx-on::after-request="this.reset(); document.getElementById('chat-feed').scrollTop = document.getElementById('chat-feed').scrollHeight;">
+            {% csrf_token %}
+            <textarea name="message" placeholder="Digite sua mensagem aqui..." required></textarea>
+            <button type="submit" class="btn-send">
+                <i class="bi bi-send-fill"></i>
+            </button>
+        </form>
+    </div>
+</div>
+{% endblock %}  
