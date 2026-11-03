@@ -92,3 +92,27 @@ def test_consulta_nao_permite_mesmo_horario_para_mesmo_medico(db_session: Sessio
 
     with pytest.raises(IntegrityError):
         db_session.commit()
+
+
+def test_horario_aceita_novo_agendamento_apos_cancelamentos_repetidos(db_session: Session) -> None:
+    usuario = Usuario(nome="Rita", email="rita@email.com", senha_hash="hash789", tipo="paciente")
+    db_session.add(usuario)
+    db_session.commit()
+    paciente = Paciente(usuario_id=usuario.id, nome="Rita Lima", cpf="11122233344", data_nascimento="1948-02-02", telefone="11977777777")
+    medico = Medico(nome="Dr. Paulo", crm="CRM-SP-11111", especialidade="Ortopedia")
+    db_session.add_all([paciente, medico])
+    db_session.commit()
+    horario = Horario(medico_id=medico.id, data="2026-10-15", hora_inicio="08:00", hora_fim="08:30", disponivel=True)
+    db_session.add(horario)
+    db_session.commit()
+
+    for _ in range(2):
+        consulta = Consulta(paciente_id=paciente.id, medico_id=medico.id, horario_id=horario.id, data="2026-10-15", status="agendada")
+        db_session.add(consulta)
+        db_session.commit()
+        consulta.status = "cancelada"
+        db_session.commit()
+    db_session.add(Consulta(paciente_id=paciente.id, medico_id=medico.id, horario_id=horario.id, data="2026-10-15", status="agendada"))
+    db_session.commit()
+
+    assert db_session.query(Consulta).filter(Consulta.horario_id == horario.id).count() == 3

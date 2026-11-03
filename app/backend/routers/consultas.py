@@ -2,7 +2,14 @@ from fastapi import APIRouter, Depends, status
 from sqlalchemy.orm import Session
 
 from app.backend.core.database import get_db
-from app.backend.schemas.consulta import ConfirmacaoConsulta, ConsultaCreate, ConsultaOut, ConsultaUpdate
+from app.backend.core.dependencies import get_current_user_id
+from app.backend.schemas.consulta import (
+    ConfirmacaoConsulta,
+    ConsultaCreate,
+    ConsultaDetalhadaOut,
+    ConsultaOut,
+    ConsultaUpdate,
+)
 from app.backend.services.consulta_service import ConsultaService
 
 router = APIRouter(prefix="/consultas", tags=["consultas"])
@@ -16,6 +23,13 @@ def create_consulta(payload: ConsultaCreate, db: Session = Depends(get_db)) -> C
 @router.get("", response_model=list[ConsultaOut])
 def list_consultas(db: Session = Depends(get_db)) -> list[ConsultaOut]:
     return ConsultaService(db).list_all()
+
+
+@router.get("/minhas", response_model=list[ConsultaDetalhadaOut])
+def list_minhas_consultas(
+    usuario_id: int = Depends(get_current_user_id), db: Session = Depends(get_db)
+) -> list[ConsultaDetalhadaOut]:
+    return ConsultaService(db).list_by_usuario(usuario_id)
 
 
 @router.get("/{consulta_id}", response_model=ConsultaOut)
