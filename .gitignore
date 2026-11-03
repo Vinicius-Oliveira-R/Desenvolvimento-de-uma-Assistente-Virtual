@@ -10,3 +10,7 @@ __pycache__/
 htmlcov/
 .pytest_cache/
 .DS_Store
+
+# Bancos locais (SQLite) e artefatos de execução
+*.db
+*.sqlite3
