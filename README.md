@@ -2,77 +2,101 @@
 
 ## Descrição
 
-Protótipo de sistema para agendamento e gestão de consultas clínicas com assistente virtual em linguagem natural.
+Protótipo de sistema para agendamento e gestão de consultas clínicas com assistente virtual em linguagem natural, que adapta a linguagem da resposta ao perfil etário inferido do paciente.
 
 ## Objetivo
 
-Implementar uma API robusta em Python com FastAPI, banco relacional PostgreSQL e módulos de NLP/ML para apoiar o agendamento de consultas, gestão de disponibilidade e adaptação da comunicação.
+Implementar uma API robusta em Python com FastAPI, banco relacional PostgreSQL e módulos de NLP/ML para apoiar o agendamento de consultas, gestão de disponibilidade e adaptação da comunicação, com um front-end Django (SSR + HTMX).
 
 ## Tecnologias
 
 - Python 3.11+
-- FastAPI
-- PostgreSQL
-- SQLAlchemy
-- Pydantic
-- Alembic
-- spaCy
-- scikit-learn
-- pytest
+- Back-end: FastAPI, SQLAlchemy, Pydantic, PostgreSQL, bcrypt, JWT
+- NLP/ML: spaCy (pipeline `pt` com EntityRuler e Matcher), scikit-learn (Random Forest)
+- Front-end: Django, HTMX, Alpine.js, Bootstrap 5, httpx
+- Testes: pytest e Django TestCase
 
 ## Arquitetura
 
-- app/core: configuração, segurança e banco
-- app/models: entidades do domínio
-- app/schemas: validação de entrada e saída
-- app/repositories: persistência
-- app/services: regras de negócio
-- app/routers: endpoints da API
-- app/assistant: processamento de intenção e diálogo
-- app/ml: preparação e classificação de dados
+```text
+assistente-clinico/
+├── app/
+│   ├── backend/                 # API FastAPI
+│   │   ├── core/                # configuração, banco, segurança, exceções de domínio, relógio
+│   │   ├── models/              # entidades do domínio
+│   │   ├── schemas/             # validação de entrada e saída
+│   │   ├── repositories/        # persistência (inclui SELECT ... FOR UPDATE)
+│   │   ├── services/            # regras de negócio (agendamento atômico, agenda)
+│   │   ├── routers/             # endpoints da API (prefixo /api)
+│   │   ├── assistant/           # NLP com spaCy, diálogo e árvore de decisão das respostas
+│   │   ├── ml/                  # heurísticas de Nielsen, Random Forest e corpus de treino
+│   │   ├── tests/
+│   │   └── seed.py              # dados de demonstração
+│   └── frontend/                # Django (SSR) consumindo a API via httpx
+├── scripts/e2e_smoke.py         # teste E2E com os dois servidores em execução
+└── docs/
+```
+
+Pipeline do assistente (`POST /api/assistant/chat`):
+
+1. **spaCy** extrai intenção (Matcher) e entidades (EntityRuler): especialidade, médico, data, período, hora e turno.
+2. **Heurísticas de Nielsen** transformam a mensagem em um vetor numérico (taxa de erros, complexidade, hesitação, vagueza e informalidade).
+3. **Random Forest** prevê o perfil etário (`IDOSO` ou `PADRAO`), suavizado ao longo da conversa.
+4. **Gerenciador de diálogo** agenda, sugere horários, lista ou cancela (cancelamento exige confirmação).
+5. **Árvore de decisão** escolhe o estilo da resposta: linguagem simplificada, sem termos técnicos e com passos numerados para `IDOSO`.
 
 ## Instalação
 
 ```bash
 python -m venv .venv
 .venv\Scripts\activate
-pip install -r requirements.txt
+pip install -r app/backend/requirements.txt -r app/frontend/requirements.txt
 ```
 
-## Configuração do banco
+## Configuração
 
-Copie o arquivo `.env.example` para `.env` e ajuste as variáveis.
+Copie `app/backend/.env.example` para `app/backend/.env` e ajuste as variáveis (o arquivo é lido independentemente do diretório de execução).
+
+O front-end lê variáveis de ambiente opcionais: `FASTAPI_BASE_URL` (padrão `http://localhost:8000/api`), `DJANGO_SECRET_KEY`, `DJANGO_DEBUG` e `DJANGO_ALLOWED_HOSTS`.
+
+> **Banco já existente:** a regra "uma consulta ativa por horário" passou a ser um índice único parcial. Em um PostgreSQL criado por versões anteriores, execute:
+>
+> ```sql
+> ALTER TABLE consultas DROP CONSTRAINT IF EXISTS uq_consulta_medico_horario_status;
+> CREATE UNIQUE INDEX IF NOT EXISTS uq_consulta_horario_ativa ON consultas (horario_id) WHERE status <> 'cancelada';
+> ```
 
 ## Execução
 
+Na raiz do projeto:
+
 ```bash
-uvicorn app.main:app --reload
+python -m app.backend.seed                      # dados de demonstração (idempotente)
+uvicorn app.backend.main:app --reload           # API em http://localhost:8000 (docs em /docs)
 ```
+
+Em outro terminal:
+
+```bash
+cd app/frontend
+python manage.py migrate
+python manage.py runserver 8001                 # front-end em http://127.0.0.1:8001
+```
+
+Pacientes de demonstração: `lurdes@clinica.com` e `carlos@clinica.com` (senha `senha123`).
 
 ## Testes
 
 ```bash
-pytest
+pytest                                          # back-end, incluindo os cenários E2E via API
+cd app/frontend && python manage.py test assistant
+python scripts/e2e_smoke.py                     # E2E real (exige API e front-end em execução)
+python -m app.backend.ml.train                  # validação cruzada do Random Forest
 ```
 
-## Estrutura do projeto
+O teste de concorrência em PostgreSQL real roda quando `TEST_POSTGRES_URL` aponta para um banco **descartável** (as tabelas são recriadas):
 
-```text
-assistente-clinico/
-├── app/
-│   ├── core/
-│   ├── models/
-│   ├── schemas/
-│   ├── repositories/
-│   ├── services/
-│   ├── routers/
-│   ├── assistant/
-│   └── ml/
-├── tests/
-├── alembic/
-├── .env.example
-├── .gitignore
-├── README.md
-├── requirements.txt
-└── app/main.py
+```bash
+set TEST_POSTGRES_URL=postgresql+psycopg://postgres:postgres@localhost:5432/assistente_clinico_test
+pytest -k postgresql
 ```
