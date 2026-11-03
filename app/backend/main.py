@@ -1,7 +1,13 @@
-from fastapi import FastAPI
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
+
+from fastapi import FastAPI, Request
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from app.backend.core.config import get_settings
 from app.backend.core.database import Base, engine
+from app.backend.core.exceptions import DomainError
 from app.backend.routers.assistant import router as assistant_router
 from app.backend.routers.auth import router as auth_router
 from app.backend.routers.consultas import router as consultas_router
@@ -11,16 +17,31 @@ from app.backend.routers.pacientes import router as pacientes_router
 
 settings = get_settings()
 
-app = FastAPI(title=settings.app_name, debug=settings.debug)
 
-Base.metadata.create_all(bind=engine)
+@asynccontextmanager
+async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+    Base.metadata.create_all(bind=engine)
+    yield
 
-app.include_router(auth_router)
-app.include_router(pacientes_router)
-app.include_router(medicos_router)
-app.include_router(horarios_router)
-app.include_router(consultas_router)
-app.include_router(assistant_router)
+
+app = FastAPI(title=settings.app_name, debug=settings.debug, lifespan=lifespan)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.cors_origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+
+@app.exception_handler(DomainError)
+async def handle_domain_error(_: Request, exc: DomainError) -> JSONResponse:
+    return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
+
+
+for router in (auth_router, pacientes_router, medicos_router, horarios_router, consultas_router, assistant_router):
+    app.include_router(router, prefix=settings.api_prefix)
 
 
 @app.get("/health")

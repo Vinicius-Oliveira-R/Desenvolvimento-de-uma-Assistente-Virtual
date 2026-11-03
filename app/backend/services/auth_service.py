@@ -1,6 +1,6 @@
-from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
+from app.backend.core.exceptions import BusinessRuleError, UnauthorizedError
 from app.backend.core.security import create_access_token, get_password_hash, verify_password
 from app.backend.models import Usuario
 from app.backend.repositories.usuario_repository import UsuarioRepository
@@ -14,7 +14,7 @@ class AuthService:
     def register(self, payload: UsuarioCreate) -> UsuarioOut:
         existing = self.repository.get_by_email(payload.email)
         if existing:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Email já cadastrado")
+            raise BusinessRuleError("Email já cadastrado")
 
         usuario = Usuario(
             nome=payload.nome,
@@ -29,7 +29,7 @@ class AuthService:
     def login(self, payload: UsuarioLogin) -> UsuarioOut:
         usuario = self.repository.get_by_email(payload.email)
         if not usuario or not verify_password(payload.senha, usuario.senha_hash):
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Credenciais inválidas")
+            raise UnauthorizedError("Credenciais inválidas")
 
         token = create_access_token(str(usuario.id))
         return UsuarioOut(id=usuario.id, nome=usuario.nome, email=usuario.email, tipo=usuario.tipo, token=token)
