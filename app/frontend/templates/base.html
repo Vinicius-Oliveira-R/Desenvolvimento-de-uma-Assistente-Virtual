@@ -1,6 +1,6 @@
 {% load static %}
 <!DOCTYPE html>
-<html lang="pt-br">
+<html lang="pt-br" data-bs-theme="dark">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -20,6 +20,7 @@
 </head>
 <body>
     <div class="app-container">
+        {% block sidebar %}
         <!-- Sidebar estilo ChatGPT/Claude -->
         <aside class="sidebar" x-data="{ openDropdown: false }">
             <div class="sidebar-header">
@@ -43,8 +44,8 @@
                         <i class="bi bi-person-fill"></i>
                     </div>
                     <div class="user-info">
-                        <span class="user-name">{{ request.user.username|default:"Paciente" }}</span>
-                        <span class="user-role">Usuário</span>
+                        <span class="user-name">{{ request.user.first_name|default:request.user.username|default:"Paciente" }}</span>
+                        <span class="user-role">Paciente</span>
                     </div>
                     <i class="bi bi-three-dots-vertical ms-auto"></i>
                 </div>
@@ -66,6 +67,7 @@
                 </div>
             </div>
         </aside>
+        {% endblock %}
 
         <!-- Área Principal de Conteúdo -->
         <main class="main-content">

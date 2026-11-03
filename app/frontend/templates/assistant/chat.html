@@ -14,20 +14,31 @@
         </div>
     </div>
 
+    <div id="digitando" class="htmx-indicator chat-typing">
+        <i class="bi bi-three-dots me-1"></i> Assistente digitando...
+    </div>
+
     <!-- Campo de Entrada HTMX -->
     <div class="chat-input-container">
-        <form id="chat-form" 
+        <form id="chat-form"
               class="chat-form"
-              hx-post="{% url 'chat' %}" 
-              hx-target="#chat-feed" 
+              x-data
+              hx-post="{% url 'chat' %}"
+              hx-target="#chat-feed"
               hx-swap="beforeend"
+              hx-indicator="#digitando"
+              hx-disabled-elt="#chat-form button"
               hx-on::after-request="this.reset(); document.getElementById('chat-feed').scrollTop = document.getElementById('chat-feed').scrollHeight;">
             {% csrf_token %}
-            <textarea name="message" placeholder="Digite sua mensagem aqui..." required></textarea>
-            <button type="submit" class="btn-send">
+            <textarea name="message"
+                      placeholder="Digite sua mensagem aqui..."
+                      maxlength="500"
+                      required
+                      @keydown.enter="if (!$event.shiftKey) { $event.preventDefault(); $el.form.requestSubmit(); }"></textarea>
+            <button type="submit" class="btn-send" aria-label="Enviar mensagem">
                 <i class="bi bi-send-fill"></i>
             </button>
         </form>
     </div>
 </div>
-{% endblock %}  
+{% endblock %}

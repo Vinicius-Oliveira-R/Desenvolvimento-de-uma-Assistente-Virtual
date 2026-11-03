@@ -235,3 +235,51 @@ body, html {
     align-items: center;
     justify-content: center;
 }
+.chat-typing {
+    max-width: 800px;
+    width: 100%;
+    margin: 0 auto;
+    padding: 0 16px 4px;
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+}
+
+.message-meta {
+    margin-top: 8px;
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+}
+
+.btn-accent {
+    background-color: var(--accent-color);
+    border-color: var(--accent-color);
+    color: #fff;
+}
+
+.btn-accent:hover {
+    background-color: #0d8a6b;
+    color: #fff;
+}
+
+/* Autenticação */
+.auth-container {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+}
+
+.auth-card {
+    width: 100%;
+    max-width: 400px;
+    background-color: var(--chat-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    padding: 32px;
+}
+
+/* Calendário */
+.calendario {
+    overflow-y: auto;
+}

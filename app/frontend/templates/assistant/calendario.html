@@ -3,13 +3,60 @@
 {% block title %}Meus Agendamentos - Assistente Clínico{% endblock %}
 
 {% block content %}
-<div class="container py-4">
+<div class="container py-4 calendario">
     <h3 class="mb-4"><i class="bi bi-calendar3 me-2"></i> Meus Agendamentos</h3>
-    
-    <div class="card bg-dark text-light border-secondary">
-        <div class="card-body">
-            <p class="text-secondary">Sua lista de consultas e horários agendados aparecerá aqui.</p>
+
+    {% if erro %}
+        <div class="alert alert-warning" role="alert">{{ erro }}</div>
+    {% endif %}
+
+    <div class="card border-secondary mb-4">
+        <div class="card-header">Próximas consultas</div>
+        <div class="card-body p-0">
+            {% if proximas %}
+                <table class="table table-hover mb-0 align-middle">
+                    <thead>
+                        <tr><th>Data</th><th>Horário</th><th>Médico</th><th>Especialidade</th><th>Status</th></tr>
+                    </thead>
+                    <tbody>
+                        {% for consulta in proximas %}
+                            <tr>
+                                <td>{{ consulta.data|date:"d/m/Y" }} <span class="text-secondary">({{ consulta.data|date:"l"|lower }})</span></td>
+                                <td>{{ consulta.hora_inicio }} – {{ consulta.hora_fim }}</td>
+                                <td>{{ consulta.medico_nome }}</td>
+                                <td>{{ consulta.especialidade }}</td>
+                                <td><span class="badge text-bg-success">Agendada</span></td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            {% else %}
+                <p class="text-secondary p-3 mb-0">
+                    Você não tem consultas agendadas. <a href="{% url 'chat' %}">Fale com o assistente</a> para marcar.
+                </p>
+            {% endif %}
         </div>
     </div>
+
+    {% if historico %}
+        <div class="card border-secondary">
+            <div class="card-header">Histórico</div>
+            <div class="card-body p-0">
+                <table class="table mb-0 align-middle text-secondary">
+                    <tbody>
+                        {% for consulta in historico %}
+                            <tr>
+                                <td>{{ consulta.data|date:"d/m/Y" }}</td>
+                                <td>{{ consulta.hora_inicio }}</td>
+                                <td>{{ consulta.medico_nome }}</td>
+                                <td>{{ consulta.especialidade }}</td>
+                                <td><span class="badge text-bg-secondary">{{ consulta.status|capfirst }}</span></td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    {% endif %}
 </div>
 {% endblock %}
