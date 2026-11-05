@@ -18,6 +18,9 @@ class PapelUsuario(StrEnum):
     def pode_cadastrar(self, papel: PapelUsuario) -> bool:
         return papel in PAPEIS_CADASTRAVEIS[self]
 
+    def papeis_cadastraveis(self) -> list[PapelUsuario]:
+        return [papel for papel in PapelUsuario if self.pode_cadastrar(papel)]
+
 
 # O gestor não aparece como alvo em nenhum perfil: ninguém o cadastra pela API, nem outro gestor.
 PAPEIS_CADASTRAVEIS: dict[PapelUsuario, frozenset[PapelUsuario]] = {

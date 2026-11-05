@@ -13,8 +13,7 @@ class UsuarioRepository:
     def get_by_email(self, email: str) -> Usuario | None:
         return self.db.query(Usuario).filter(Usuario.email == email).first()
 
-    def create(self, usuario: Usuario) -> Usuario:
+    def add(self, usuario: Usuario) -> Usuario:
         self.db.add(usuario)
-        self.db.commit()
-        self.db.refresh(usuario)
+        self.db.flush()
         return usuario

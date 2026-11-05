@@ -1,8 +1,8 @@
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.orm import Session
 
 from app.backend.core.database import get_db
-from app.backend.schemas.horario import HorarioCreate, HorarioOut
+from app.backend.schemas.horario import DATA_ISO, HorarioCreate, HorarioOut
 from app.backend.services.horario_service import HorarioService
 
 router = APIRouter(prefix="/horarios", tags=["horarios"])
@@ -14,5 +14,10 @@ def create_horario(payload: HorarioCreate, db: Session = Depends(get_db)) -> Hor
 
 
 @router.get("", response_model=list[HorarioOut])
-def list_horarios(db: Session = Depends(get_db)) -> list[HorarioOut]:
-    return HorarioService(db).list_all()
+def list_horarios(
+    medico_id: int | None = None,
+    data: str | None = Query(None, pattern=DATA_ISO),
+    disponivel: bool | None = None,
+    db: Session = Depends(get_db),
+) -> list[HorarioOut]:
+    return HorarioService(db).list(medico_id=medico_id, data=data, disponivel=disponivel)

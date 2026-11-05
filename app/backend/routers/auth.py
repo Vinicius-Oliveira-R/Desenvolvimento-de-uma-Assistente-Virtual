@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from app.backend.core.database import get_db
 from app.backend.core.dependencies import get_current_user
 from app.backend.models import Usuario
-from app.backend.schemas.usuario import SessaoOut, UsuarioCreate, UsuarioLogin, UsuarioOut
+from app.backend.schemas.usuario import PerfilOut, SessaoOut, UsuarioCreate, UsuarioLogin, UsuarioOut
 from app.backend.services.auth_service import AuthService
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -24,6 +24,6 @@ def login(payload: UsuarioLogin, db: Session = Depends(get_db)) -> SessaoOut:
     return AuthService(db).login(payload)
 
 
-@router.get("/me", response_model=UsuarioOut)
-def get_me(usuario: Usuario = Depends(get_current_user)) -> UsuarioOut:
-    return UsuarioOut.model_validate(usuario)
+@router.get("/me", response_model=PerfilOut)
+def get_me(usuario: Usuario = Depends(get_current_user)) -> PerfilOut:
+    return PerfilOut.from_usuario(usuario)

@@ -18,11 +18,11 @@ from django.contrib import admin
 from django.contrib.auth.views import LogoutView
 from django.urls import include, path
 
-from assistant.views import PacienteLoginView
+from assistant.views import ClinicaLoginView
 
 urlpatterns = [
     path('admin/', admin.site.urls),
-    path('login/', PacienteLoginView.as_view(), name='login'),
+    path('login/', ClinicaLoginView.as_view(), name='login'),
     path('logout/', LogoutView.as_view(), name='logout'),
     path('', include('assistant.urls')),
 ]

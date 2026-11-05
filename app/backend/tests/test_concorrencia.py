@@ -94,6 +94,7 @@ def test_cenario_c_api_retorna_409_amigavel_para_a_segunda_requisicao(api: Clini
         respostas.append(
             cliente.post(
                 "/api/consultas",
+                headers=api.admin,
                 json={"paciente_id": paciente_id, "medico_id": medico, "horario_id": horario, "data": "2026-11-20"},
             )
         )

@@ -26,6 +26,7 @@ class FastAPIAuthBackend(BaseBackend):
             usuario.set_unusable_password()
             usuario.save(update_fields=["password"])
         usuario.api_token = sessao.token
+        usuario.api_papel = sessao.papel
         return usuario
 
     def get_user(self, user_id: int) -> AbstractBaseUser | None:

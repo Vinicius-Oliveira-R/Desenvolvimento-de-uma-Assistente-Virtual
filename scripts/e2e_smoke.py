@@ -127,7 +127,8 @@ def cenario_c(api_url: str, api: httpx.Client) -> None:
     respostas: list[httpx.Response] = []
 
     def reservar(paciente: dict) -> None:
-        with httpx.Client(base_url=api_url, timeout=30) as cliente:
+        cabecalho = {"Authorization": api.headers["Authorization"]}
+        with httpx.Client(base_url=api_url, timeout=30, headers=cabecalho) as cliente:
             largada.wait()
             respostas.append(
                 cliente.post(

@@ -26,5 +26,8 @@ class HorarioService:
         saved = self.repository.create(horario)
         return HorarioOut.model_validate(saved)
 
-    def list_all(self) -> list[HorarioOut]:
-        return [HorarioOut.model_validate(item) for item in self.repository.list_all()]
+    def list(
+        self, *, medico_id: int | None = None, data: str | None = None, disponivel: bool | None = None
+    ) -> list[HorarioOut]:
+        horarios = self.repository.list_filtered(medico_id=medico_id, data=data, disponivel=disponivel)
+        return [HorarioOut.model_validate(item) for item in horarios]

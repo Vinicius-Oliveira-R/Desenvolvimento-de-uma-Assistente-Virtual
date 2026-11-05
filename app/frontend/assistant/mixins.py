@@ -2,8 +2,11 @@ from django.contrib.auth import alogout
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.auth.views import redirect_to_login
 from django.http import HttpRequest, HttpResponse
+from django.shortcuts import redirect
 
-from assistant.api_client import ClinicaApiClient
+from assistant.api_client import ClinicaApiClient, SessaoExpiradaError
+from assistant.perfis import PACIENTE, pagina_inicial
+from assistant.session import SessaoAssistente
 
 
 class AsyncLoginRequiredMixin(LoginRequiredMixin):
@@ -23,6 +26,23 @@ class AsyncLoginRequiredMixin(LoginRequiredMixin):
 
 
 class ClinicaApiMixin(AsyncLoginRequiredMixin):
+    papeis_permitidos: frozenset[str] = frozenset({PACIENTE})
+    token: str
+
+    async def dispatch(self, request: HttpRequest, *args, **kwargs) -> HttpResponse:
+        if (await request.auser()).is_authenticated:
+            sessao = SessaoAssistente(request.session)
+            papel, token = await sessao.papel(), await sessao.token()
+            if papel is None or token is None:
+                return await self.end_session(request)
+            if papel not in self.papeis_permitidos:
+                return redirect(pagina_inicial(papel))
+            self.token = token
+        try:
+            return await super().dispatch(request, *args, **kwargs)
+        except SessaoExpiradaError:
+            return await self.end_session(request)
+
     def get_api_client(self) -> ClinicaApiClient:
         return ClinicaApiClient.from_settings()
 

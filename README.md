@@ -49,12 +49,12 @@ Pipeline do assistente (`POST /api/assistant/chat`):
 
 Cada usuário tem um `papel`: `gestor` (responsável pela clínica), `admin` (atendente), `medico` ou `paciente`. O papel é conferido no banco a cada requisição, a partir do usuário identificado pelo token JWT.
 
-| Usuário logado | Cadastra usuários (`POST /api/auth/register`) | Pacientes (`POST`/`GET /api/pacientes`) | Médicos (`POST /api/medicos`) |
-|---|---|---|---|
-| `gestor` | médicos e atendentes | não | sim |
-| `admin` | pacientes e atendentes | sim | não |
-| `medico` | pacientes, atendentes e médicos | sim | sim |
-| `paciente` | não | não | não |
+| Usuário logado | Cadastra usuários (`POST /api/auth/register`) | Pacientes (`POST`/`GET /api/pacientes`) | Médicos (`POST /api/medicos`) | Consultas (`/api/consultas`) |
+|---|---|---|---|---|
+| `gestor` | médicos e atendentes | não | sim | não |
+| `admin` | pacientes e atendentes | sim | não | agenda, remarca e cancela |
+| `medico` | pacientes, atendentes e médicos | sim | sim | agenda, remarca e cancela |
+| `paciente` | não | não | não | só as próprias (`/api/consultas/minhas`) e pelo assistente |
 
 Ninguém cadastra um `gestor` pela API, nem outro gestor: essa conta só é criada direto no banco, pelo seed. As permissões de cadastro ficam em um único lugar, `PAPEIS_CADASTRAVEIS` em `app/backend/models/usuario.py`.
 
@@ -111,7 +111,7 @@ python manage.py migrate
 python manage.py runserver 8001                 # front-end em http://127.0.0.1:8001
 ```
 
-Usuários de demonstração (senha `senha123`): `gestor@clinica.com` (`gestor`), `recepcao@clinica.com` (atendente, `admin`), `joao.mendes@clinica.com` (`medico`), `lurdes@clinica.com` e `carlos@clinica.com` (`paciente`). O site Django é a área do paciente.
+Usuários de demonstração (senha `senha123`): `gestor@clinica.com` (`gestor`), `recepcao@clinica.com` (atendente, `admin`), `joao.mendes@clinica.com` (`medico`), `lurdes@clinica.com` e `carlos@clinica.com` (`paciente`). No site Django, pacientes caem no chat; gestor, atendentes e médicos caem no painel da equipe, onde cadastram usuários (com a ficha de paciente ou de médico) e, conforme o perfil, consultam a lista de pacientes. Atendentes e médicos também gerenciam as consultas: agenda com filtros, novo agendamento, remarcação e cancelamento (alterações e cancelamentos exigem marcar que o paciente confirmou).
 
 ## Testes
 

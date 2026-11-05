@@ -1,0 +1,55 @@
+{% extends 'base.html' %}
+
+{% block title %}Painel da equipe - Assistente Clínico{% endblock %}
+
+{% block content %}
+<div class="container py-4 calendario">
+    <div class="d-flex align-items-center mb-4">
+        <h3 class="mb-0"><i class="bi bi-people me-2"></i> Painel da equipe</h3>
+        {% if gerencia_consultas %}
+        <a href="{% url 'consultas' %}" class="btn btn-outline-secondary ms-auto me-2">
+            <i class="bi bi-calendar-check me-2"></i>Consultas
+        </a>
+        {% endif %}
+        <a href="{% url 'cadastro_usuario' %}" class="btn btn-accent {% if not gerencia_consultas %}ms-auto{% endif %}">
+            <i class="bi bi-person-plus me-2"></i>Cadastrar usuário
+        </a>
+    </div>
+
+    {% if erro %}
+        <div class="alert alert-warning" role="alert">{{ erro }}</div>
+    {% endif %}
+
+    {% if pacientes is not None %}
+        <div class="card border-secondary">
+            <div class="card-header">Pacientes cadastrados</div>
+            <div class="card-body p-0">
+                {% if pacientes %}
+                    <table class="table table-hover mb-0 align-middle">
+                        <thead>
+                            <tr><th>Nome</th><th>CPF</th><th>Nascimento</th><th>Telefone</th></tr>
+                        </thead>
+                        <tbody>
+                            {% for paciente in pacientes %}
+                                <tr>
+                                    <td>{{ paciente.nome }}</td>
+                                    <td>{{ paciente.cpf_formatado }}</td>
+                                    <td>{{ paciente.data_nascimento|date:"d/m/Y" }}</td>
+                                    <td>{{ paciente.telefone }}</td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                {% else %}
+                    <p class="text-secondary p-3 mb-0">Nenhum paciente cadastrado ainda.</p>
+                {% endif %}
+            </div>
+        </div>
+    {% elif not erro %}
+        <p class="text-secondary">
+            Seu perfil cadastra a equipe da clínica. Use <a href="{% url 'cadastro_usuario' %}">Cadastrar usuário</a>
+            para incluir médicos e atendentes.
+        </p>
+    {% endif %}
+</div>
+{% endblock %}

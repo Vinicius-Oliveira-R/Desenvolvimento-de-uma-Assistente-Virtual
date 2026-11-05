@@ -1,6 +1,6 @@
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.backend.models import Consulta, Horario, Medico, StatusConsulta
+from app.backend.models import Consulta, Horario, Medico, Paciente, StatusConsulta
 
 
 class ConsultaCreate(BaseModel):
@@ -61,4 +61,19 @@ class ConsultaDetalhadaOut(BaseModel):
             medico_nome=medico.nome,
             especialidade=medico.especialidade,
             observacao=consulta.observacao,
+        )
+
+
+class ConsultaAgendaOut(ConsultaDetalhadaOut):
+    horario_id: int
+    paciente_id: int
+    paciente_nome: str
+
+    @classmethod
+    def from_agenda(
+        cls, consulta: Consulta, horario: Horario, medico: Medico, paciente: Paciente
+    ) -> "ConsultaAgendaOut":
+        detalhada = ConsultaDetalhadaOut.from_models(consulta, horario, medico)
+        return cls(
+            **detalhada.model_dump(), horario_id=horario.id, paciente_id=paciente.id, paciente_nome=paciente.nome
         )

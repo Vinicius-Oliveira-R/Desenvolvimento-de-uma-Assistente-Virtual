@@ -1,6 +1,6 @@
 from sqlalchemy.orm import Session
 
-from app.backend.core.exceptions import NotFoundError
+from app.backend.core.exceptions import ConflictError, NotFoundError
 from app.backend.models import Medico
 from app.backend.repositories.medico_repository import MedicoRepository
 from app.backend.schemas.medico import MedicoCreate, MedicoOut
@@ -11,6 +11,8 @@ class MedicoService:
         self.repository = MedicoRepository(db)
 
     def create(self, payload: MedicoCreate) -> MedicoOut:
+        if self.repository.get_by_crm(payload.crm):
+            raise ConflictError("Já existe um médico com este CRM")
         medico = Medico(
             nome=payload.nome,
             crm=payload.crm,

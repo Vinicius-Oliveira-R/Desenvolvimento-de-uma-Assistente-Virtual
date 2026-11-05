@@ -1,0 +1,61 @@
+{% extends 'base.html' %}
+{% load crispy_forms_tags %}
+
+{% block title %}Consultas - Assistente Clínico{% endblock %}
+
+{% block content %}
+<div class="container py-4 calendario">
+    <div class="d-flex align-items-center mb-4">
+        <h3 class="mb-0"><i class="bi bi-calendar-check me-2"></i> Consultas</h3>
+        <a href="{% url 'nova_consulta' %}" class="btn btn-accent ms-auto">
+            <i class="bi bi-plus-lg me-2"></i>Nova consulta
+        </a>
+    </div>
+
+    {% include 'equipe/partials/mensagens.html' %}
+
+    {% if erro %}
+        <div class="alert alert-warning" role="alert">{{ erro }}</div>
+    {% else %}
+        <form method="get" class="row g-2 align-items-end" novalidate>
+            <div class="col-md-3">{{ filtro.data_inicio|as_crispy_field }}</div>
+            <div class="col-md-3">{{ filtro.data_fim|as_crispy_field }}</div>
+            <div class="col-md-3">{{ filtro.medico_id|as_crispy_field }}</div>
+            <div class="col-md-2">{{ filtro.status|as_crispy_field }}</div>
+            <div class="col-md-1 mb-3">
+                <button type="submit" class="btn btn-outline-secondary w-100" title="Filtrar"><i class="bi bi-funnel"></i></button>
+            </div>
+        </form>
+
+        <div class="card border-secondary">
+            <div class="card-body p-0">
+                {% if consultas %}
+                    <table class="table table-hover mb-0 align-middle">
+                        <thead>
+                            <tr><th>Data</th><th>Horário</th><th>Paciente</th><th>Médico</th><th>Situação</th><th></th></tr>
+                        </thead>
+                        <tbody>
+                            {% for consulta in consultas %}
+                                <tr>
+                                    <td>{{ consulta.data|date:"d/m/Y" }} <span class="text-secondary">({{ consulta.data|date:"D"|lower }})</span></td>
+                                    <td>{{ consulta.hora_inicio }} – {{ consulta.hora_fim }}</td>
+                                    <td>{{ consulta.paciente_nome }}</td>
+                                    <td>{{ consulta.medico_nome }} <span class="text-secondary">· {{ consulta.especialidade }}</span></td>
+                                    <td>{% include 'equipe/partials/situacao.html' with status=consulta.status %}</td>
+                                    <td class="text-end">
+                                        <a href="{% url 'editar_consulta' consulta.id %}" class="btn btn-sm btn-outline-secondary">
+                                            <i class="bi bi-pencil-square me-1"></i>Gerenciar
+                                        </a>
+                                    </td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                {% else %}
+                    <p class="text-secondary p-3 mb-0">Nenhuma consulta encontrada com esses filtros.</p>
+                {% endif %}
+            </div>
+        </div>
+    {% endif %}
+</div>
+{% endblock %}

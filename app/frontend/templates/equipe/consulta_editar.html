@@ -1,0 +1,75 @@
+{% extends 'base.html' %}
+{% load crispy_forms_tags %}
+
+{% block title %}Gerenciar consulta - Assistente Clínico{% endblock %}
+
+{% block content %}
+<div class="container py-4 calendario" style="max-width: 760px;">
+    <h3 class="mb-4">
+        <a href="{% url 'consultas' %}" class="text-secondary me-2" title="Voltar"><i class="bi bi-arrow-left"></i></a>
+        Gerenciar consulta
+    </h3>
+
+    {% include 'equipe/partials/mensagens.html' %}
+
+    {% if erro %}
+        <div class="alert alert-warning" role="alert">{{ erro }}</div>
+    {% else %}
+        <div class="card border-secondary mb-4">
+            <div class="card-body">
+                <div class="d-flex align-items-center mb-2">
+                    <h5 class="mb-0">{{ consulta.paciente_nome }}</h5>
+                    <span class="ms-auto">{% include 'equipe/partials/situacao.html' with status=consulta.status %}</span>
+                </div>
+                <p class="mb-1">
+                    <i class="bi bi-calendar3 me-2"></i>{{ consulta.data|date:"d/m/Y" }} ({{ consulta.data|date:"l"|lower }}),
+                    {{ consulta.hora_inicio }} – {{ consulta.hora_fim }}
+                </p>
+                <p class="mb-1"><i class="bi bi-person-badge me-2"></i>{{ consulta.medico_nome }} · {{ consulta.especialidade }}</p>
+                {% if consulta.observacao %}
+                    <p class="mb-0 text-secondary"><i class="bi bi-chat-left-text me-2"></i>{{ consulta.observacao }}</p>
+                {% endif %}
+            </div>
+        </div>
+
+        {% if consulta.status == 'cancelada' %}
+            <div class="alert alert-secondary" role="alert">
+                Esta consulta foi cancelada e o horário já está livre. Para atender o paciente, agende uma nova consulta.
+            </div>
+        {% else %}
+            <form method="post" novalidate class="card border-secondary p-4 mb-4">
+                {% csrf_token %}
+                <h6 class="mb-3">Remarcar ou atualizar</h6>
+                {% for erro_geral in form.non_field_errors %}
+                    <div class="alert alert-danger" role="alert">{{ erro_geral }}</div>
+                {% endfor %}
+                <div class="row">
+                    <div class="col-md-7">{{ form.medico_id|as_crispy_field }}</div>
+                    <div class="col-md-5">{{ form.data|as_crispy_field }}</div>
+                </div>
+                {{ form.horario_id|as_crispy_field }}
+                <div class="row">
+                    <div class="col-md-4">{{ form.status|as_crispy_field }}</div>
+                    <div class="col-md-8">{{ form.observacao|as_crispy_field }}</div>
+                </div>
+                {{ form.confirmado|as_crispy_field }}
+                <button type="submit" class="btn btn-accent">
+                    <i class="bi bi-check2-circle me-2"></i>Salvar alterações
+                </button>
+            </form>
+
+            {% if consulta.ativa %}
+                <form method="post" action="{% url 'cancelar_consulta' consulta.id %}" novalidate class="card border-danger p-4">
+                    {% csrf_token %}
+                    <h6 class="mb-3 text-danger">Cancelar consulta</h6>
+                    <p class="text-secondary mb-2">O horário volta a ficar livre para outros pacientes.</p>
+                    {{ cancelamento.confirmado|as_crispy_field }}
+                    <button type="submit" class="btn btn-outline-danger">
+                        <i class="bi bi-x-circle me-2"></i>Cancelar consulta
+                    </button>
+                </form>
+            {% endif %}
+        {% endif %}
+    {% endif %}
+</div>
+{% endblock %}

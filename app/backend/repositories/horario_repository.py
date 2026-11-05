@@ -31,6 +31,18 @@ class HorarioRepository:
     def list_all(self) -> list[Horario]:
         return self.db.query(Horario).all()
 
+    def list_filtered(
+        self, *, medico_id: int | None = None, data: str | None = None, disponivel: bool | None = None
+    ) -> list[Horario]:
+        query = self.db.query(Horario)
+        if medico_id is not None:
+            query = query.filter(Horario.medico_id == medico_id)
+        if data is not None:
+            query = query.filter(Horario.data == data)
+        if disponivel is not None:
+            query = query.filter(Horario.disponivel.is_(disponivel))
+        return query.order_by(Horario.data, Horario.hora_inicio, Horario.id).all()
+
     def get_by_id(self, horario_id: int) -> Horario | None:
         return self.db.query(Horario).filter(Horario.id == horario_id).first()
 

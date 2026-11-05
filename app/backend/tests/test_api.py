@@ -14,13 +14,13 @@ def test_register_and_login(api: ClinicaApi) -> None:
 
 
 def test_patient_and_doctor_flow(api: ClinicaApi) -> None:
-    headers, paciente_id = api.cadastrar_paciente("Paciente Teste", "paciente@email.com", "12345678900")
+    _, paciente_id = api.cadastrar_paciente("Paciente Teste", "paciente@email.com", "12345678900")
     medico_id = api.cadastrar_medico("Dr. João", "CRM-SP-1234", "Cardiologia")
     horario_id = api.cadastrar_horario(medico_id, "2026-10-10", "09:00")
 
     consulta = api.client.post(
         "/api/consultas",
-        headers=headers,
+        headers=api.admin,
         json={
             "paciente_id": paciente_id,
             "medico_id": medico_id,
@@ -34,49 +34,57 @@ def test_patient_and_doctor_flow(api: ClinicaApi) -> None:
 
 
 def test_consultation_conflict(api: ClinicaApi) -> None:
-    headers, paciente_id = api.cadastrar_paciente("Paciente Conflito", "paciente2@email.com", "11111111111")
+    _, paciente_id = api.cadastrar_paciente("Paciente Conflito", "paciente2@email.com", "11111111111")
     medico_id = api.cadastrar_medico("Dra. Maria", "CRM-SP-4321", "Neurologia")
     horario_id = api.cadastrar_horario(medico_id, "2026-11-05", "14:00")
     consulta = {"paciente_id": paciente_id, "medico_id": medico_id, "horario_id": horario_id, "data": "2026-11-05"}
 
-    first = api.client.post("/api/consultas", headers=headers, json={**consulta, "observacao": "Primeira"})
+    first = api.client.post("/api/consultas", headers=api.admin, json={**consulta, "observacao": "Primeira"})
     assert first.status_code == 201, first.text
 
-    second = api.client.post("/api/consultas", headers=headers, json={**consulta, "observacao": "Segunda"})
+    second = api.client.post("/api/consultas", headers=api.admin, json={**consulta, "observacao": "Segunda"})
     assert second.status_code == 409, second.text
 
 
 def test_cancel_and_update_require_confirmation(api: ClinicaApi) -> None:
-    headers, paciente_id = api.cadastrar_paciente("Paciente Confirmação", "confirmacao@email.com", "22222222222")
+    _, paciente_id = api.cadastrar_paciente("Paciente Confirmação", "confirmacao@email.com", "22222222222")
     medico_id = api.cadastrar_medico("Dr. Carlos", "CRM-SP-5555", "Dermatologia")
     horario_id = api.cadastrar_horario(medico_id, "2026-12-15", "10:00")
     consulta = {"paciente_id": paciente_id, "medico_id": medico_id, "horario_id": horario_id, "data": "2026-12-15"}
 
     criada = api.client.post(
-        "/api/consultas", headers=headers, json={**consulta, "observacao": "Consulta para confirmação"}
+        "/api/consultas", headers=api.admin, json={**consulta, "observacao": "Consulta para confirmação"}
     )
     consulta_id = criada.json()["id"]
 
-    unconfirmed_cancel = api.client.request("DELETE", f"/api/consultas/{consulta_id}", json={"confirmado": False})
+    unconfirmed_cancel = api.client.request(
+        "DELETE", f"/api/consultas/{consulta_id}", headers=api.admin, json={"confirmado": False}
+    )
     assert unconfirmed_cancel.status_code == 400, unconfirmed_cancel.text
 
-    confirmed_cancel = api.client.request("DELETE", f"/api/consultas/{consulta_id}", json={"confirmado": True})
+    confirmed_cancel = api.client.request(
+        "DELETE", f"/api/consultas/{consulta_id}", headers=api.admin, json={"confirmado": True}
+    )
     assert confirmed_cancel.status_code == 200, confirmed_cancel.text
     assert confirmed_cancel.json()["status"] == "cancelada"
 
     new_consultation = api.client.post(
-        "/api/consultas", headers=headers, json={**consulta, "observacao": "Nova consulta"}
+        "/api/consultas", headers=api.admin, json={**consulta, "observacao": "Nova consulta"}
     )
     assert new_consultation.status_code == 201, new_consultation.text
     new_id = new_consultation.json()["id"]
 
     unconfirmed_update = api.client.put(
-        f"/api/consultas/{new_id}", json={"observacao": "Atualizada sem confirmação", "confirmado": False}
+        f"/api/consultas/{new_id}",
+        headers=api.admin,
+        json={"observacao": "Atualizada sem confirmação", "confirmado": False},
     )
     assert unconfirmed_update.status_code == 400, unconfirmed_update.text
 
     confirmed_update = api.client.put(
-        f"/api/consultas/{new_id}", json={"observacao": "Atualizada com confirmação", "confirmado": True}
+        f"/api/consultas/{new_id}",
+        headers=api.admin,
+        json={"observacao": "Atualizada com confirmação", "confirmado": True},
     )
     assert confirmed_update.status_code == 200, confirmed_update.text
     assert confirmed_update.json()["observacao"] == "Atualizada com confirmação"

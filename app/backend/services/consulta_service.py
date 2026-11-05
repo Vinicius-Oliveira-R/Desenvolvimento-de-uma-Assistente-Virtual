@@ -7,11 +7,12 @@ from sqlalchemy.orm import Session
 
 from app.backend.core.exceptions import BusinessRuleError, ConflictError, HorarioIndisponivelError, NotFoundError
 from app.backend.models import Consulta, Horario, Medico, Paciente, StatusConsulta
-from app.backend.repositories.consulta_repository import ConsultaRepository
+from app.backend.repositories.consulta_repository import ConsultaRepository, FiltroAgenda
 from app.backend.repositories.horario_repository import HorarioRepository
 from app.backend.repositories.paciente_repository import PacienteRepository
 from app.backend.schemas.consulta import (
     ConfirmacaoConsulta,
+    ConsultaAgendaOut,
     ConsultaCreate,
     ConsultaDetalhadaOut,
     ConsultaOut,
@@ -54,8 +55,8 @@ class ConsultaService:
             )
         return ConsultaOut.model_validate(consulta)
 
-    def list_all(self) -> list[ConsultaOut]:
-        return [ConsultaOut.model_validate(item) for item in self.repository.list_all()]
+    def list_agenda(self, filtro: FiltroAgenda) -> list[ConsultaAgendaOut]:
+        return [ConsultaAgendaOut.from_agenda(*linha) for linha in self.repository.list_agenda(filtro)]
 
     def list_by_usuario(self, usuario_id: int) -> list[ConsultaDetalhadaOut]:
         paciente = PacienteRepository(self.db).get_by_usuario_id(usuario_id)
@@ -66,11 +67,11 @@ class ConsultaService:
             for consulta, horario, medico in self.repository.list_detalhadas_by_paciente(paciente.id)
         ]
 
-    def get_by_id(self, consulta_id: int) -> ConsultaOut:
-        consulta = self.repository.get_by_id(consulta_id)
-        if not consulta:
+    def get_da_agenda(self, consulta_id: int) -> ConsultaAgendaOut:
+        linha = self.repository.get_da_agenda(consulta_id)
+        if linha is None:
             raise NotFoundError("Consulta não encontrada")
-        return ConsultaOut.model_validate(consulta)
+        return ConsultaAgendaOut.from_agenda(*linha)
 
     def update(self, consulta_id: int, payload: ConsultaUpdate) -> ConsultaOut:
         with self._transacao():
