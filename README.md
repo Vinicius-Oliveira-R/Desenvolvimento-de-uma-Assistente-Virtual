@@ -45,6 +45,18 @@ Pipeline do assistente (`POST /api/assistant/chat`):
 4. **Gerenciador de diálogo** agenda, sugere horários, lista ou cancela (cancelamento exige confirmação). A especialidade é perguntada no máximo uma vez: se o paciente não souber ("não sei", "qualquer um"), o agendamento segue com Clínica Geral. Pedidos de remédio, receita ou diagnóstico são recusados, porque o sistema não diagnostica nem prescreve, e viram uma oferta de consulta com Clínica Geral.
 5. **Árvore de decisão** escolhe o estilo da resposta: linguagem simplificada, sem termos técnicos e com passos numerados para `IDOSO`.
 
+## Perfis de acesso (RBAC)
+
+Cada usuário tem um `papel`: `admin` (atendente), `medico` ou `paciente`. O papel é conferido no banco a cada requisição, a partir do usuário identificado pelo token JWT.
+
+| Usuário logado | Cadastra usuários (`POST /api/auth/register`) | Pacientes (`POST`/`GET /api/pacientes`) | Médicos (`POST /api/medicos`) |
+|---|---|---|---|
+| `admin` | pacientes, médicos e atendentes | sim | sim |
+| `medico` | pacientes e atendentes | sim | não |
+| `paciente` | não | não | não |
+
+O cadastro de um paciente tem duas etapas: `POST /api/auth/register` cria o usuário (com o `papel`) e `POST /api/pacientes` cria a ficha vinculada a ele (`usuario_id`). Sem token, essas rotas respondem 401; com um perfil sem permissão, 403.
+
 ## Instalação
 
 ```bash
@@ -59,11 +71,13 @@ Copie `app/backend/.env.example` para `app/backend/.env` e ajuste as variáveis 
 
 O front-end lê variáveis de ambiente opcionais: `FASTAPI_BASE_URL` (padrão `http://127.0.0.1:8000/api`), `DJANGO_SECRET_KEY`, `DJANGO_DEBUG` e `DJANGO_ALLOWED_HOSTS`.
 
-> **Banco já existente:** a regra "uma consulta ativa por horário" passou a ser um índice único parcial. Em um PostgreSQL criado por versões anteriores, execute:
+> **Banco já existente:** o `create_all` não altera tabelas que já existem. Em um PostgreSQL criado por versões anteriores, execute o SQL abaixo e rode o seed de novo, para criar os usuários de atendente e de médico. Em um banco SQLite de demonstração, basta apagar o arquivo e rodar o seed.
 >
 > ```sql
 > ALTER TABLE consultas DROP CONSTRAINT IF EXISTS uq_consulta_medico_horario_status;
 > CREATE UNIQUE INDEX IF NOT EXISTS uq_consulta_horario_ativa ON consultas (horario_id) WHERE status <> 'cancelada';
+> ALTER TABLE usuarios RENAME COLUMN tipo TO papel;
+> UPDATE usuarios SET papel = 'paciente' WHERE papel NOT IN ('admin', 'medico', 'paciente');
 > ```
 
 ## Execução
@@ -83,7 +97,7 @@ python manage.py migrate
 python manage.py runserver 8001                 # front-end em http://127.0.0.1:8001
 ```
 
-Pacientes de demonstração: `lurdes@clinica.com` e `carlos@clinica.com` (senha `senha123`).
+Usuários de demonstração (senha `senha123`): `recepcao@clinica.com` (atendente, `admin`), `joao.mendes@clinica.com` (`medico`), `lurdes@clinica.com` e `carlos@clinica.com` (`paciente`). O site Django é a área do paciente.
 
 ## Testes
 

@@ -2,6 +2,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 
 class PacienteCreate(BaseModel):
+    usuario_id: int
     nome: str = Field(..., min_length=2, max_length=150)
     cpf: str = Field(..., min_length=11, max_length=11)
     data_nascimento: str

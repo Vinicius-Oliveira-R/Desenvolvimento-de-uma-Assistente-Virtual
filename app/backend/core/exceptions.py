@@ -25,6 +25,10 @@ class UnauthorizedError(DomainError):
     status_code = status.HTTP_401_UNAUTHORIZED
 
 
+class ForbiddenError(DomainError):
+    status_code = status.HTTP_403_FORBIDDEN
+
+
 class HorarioIndisponivelError(ConflictError):
     MENSAGEM_RESERVADO = "Este horário acabou de ser reservado por outro paciente."
 

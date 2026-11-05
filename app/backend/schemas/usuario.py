@@ -1,13 +1,14 @@
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 
 from app.backend.core.security import BCRYPT_LIMITE_BYTES
+from app.backend.models.usuario import PapelUsuario
 
 
 class UsuarioCreate(BaseModel):
     nome: str = Field(..., min_length=2, max_length=150)
     email: EmailStr
     senha: str = Field(..., min_length=6, max_length=BCRYPT_LIMITE_BYTES)
-    tipo: str = Field(default="paciente", max_length=50)
+    papel: PapelUsuario = PapelUsuario.PACIENTE
 
     @field_validator("senha")
     @classmethod
@@ -28,5 +29,8 @@ class UsuarioOut(BaseModel):
     id: int
     nome: str
     email: str
-    tipo: str
-    token: str | None = None
+    papel: PapelUsuario
+
+
+class SessaoOut(UsuarioOut):
+    token: str

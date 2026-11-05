@@ -2,13 +2,16 @@ from fastapi import APIRouter, Depends, status
 from sqlalchemy.orm import Session
 
 from app.backend.core.database import get_db
+from app.backend.core.dependencies import require_admin
 from app.backend.schemas.medico import MedicoCreate, MedicoOut
 from app.backend.services.medico_service import MedicoService
 
 router = APIRouter(prefix="/medicos", tags=["medicos"])
 
 
-@router.post("", response_model=MedicoOut, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "", response_model=MedicoOut, status_code=status.HTTP_201_CREATED, dependencies=[Depends(require_admin)]
+)
 def create_medico(payload: MedicoCreate, db: Session = Depends(get_db)) -> MedicoOut:
     return MedicoService(db).create(payload)
 

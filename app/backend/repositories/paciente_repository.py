@@ -22,5 +22,8 @@ class PacienteRepository:
     def get_by_usuario_id(self, usuario_id: int) -> Paciente | None:
         return self.db.query(Paciente).filter(Paciente.usuario_id == usuario_id).first()
 
+    def get_by_cpf(self, cpf: str) -> Paciente | None:
+        return self.db.query(Paciente).filter(Paciente.cpf == cpf).first()
+
     def find_by_name(self, nome: str) -> Paciente | None:
         return self.db.query(Paciente).filter(Paciente.nome.ilike(f"%{nome}%")).first()

@@ -3,6 +3,13 @@ from typing import Any
 
 from fastapi.testclient import TestClient
 
+from app.backend.core.database import SessionLocal
+from app.backend.core.security import create_access_token, get_password_hash
+from app.backend.models import PapelUsuario, Usuario
+
+SENHA_PADRAO = "senha123"
+_HASH_SENHA_PADRAO = get_password_hash(SENHA_PADRAO)
+
 
 class Conversa:
     def __init__(self, client: TestClient, headers: dict[str, str]):
@@ -23,21 +30,56 @@ class Conversa:
 class ClinicaApi:
     def __init__(self, client: TestClient):
         self.client = client
+        self.admin = self.criar_usuario_no_banco("Recepção", "recepcao@email.com", PapelUsuario.ADMIN)
+
+    @staticmethod
+    def criar_usuario_no_banco(nome: str, email: str, papel: PapelUsuario) -> dict[str, str]:
+        """O primeiro atendente não tem quem o cadastre pela API, então nasce direto no banco."""
+        with SessionLocal() as db:
+            usuario = Usuario(nome=nome, email=email, senha_hash=_HASH_SENHA_PADRAO, papel=papel)
+            db.add(usuario)
+            db.commit()
+            return ClinicaApi.cabecalho_de(usuario.id)
+
+    @staticmethod
+    def definir_papel(usuario_id: int, papel: PapelUsuario) -> None:
+        with SessionLocal() as db:
+            db.get(Usuario, usuario_id).papel = papel
+            db.commit()
+
+    @staticmethod
+    def cabecalho_de(usuario_id: int) -> dict[str, str]:
+        return {"Authorization": f"Bearer {create_access_token(str(usuario_id))}"}
+
+    def cadastrar_usuario(self, nome: str, email: str, papel: PapelUsuario = PapelUsuario.PACIENTE) -> dict[str, Any]:
+        resposta = self.client.post(
+            "/api/auth/register",
+            headers=self.admin,
+            json={"nome": nome, "email": email, "senha": SENHA_PADRAO, "papel": papel},
+        )
+        assert resposta.status_code == 201, resposta.text
+        return resposta.json()
 
     def cadastrar_paciente(self, nome: str, email: str, cpf: str) -> tuple[dict[str, str], int]:
-        registro = self.client.post("/api/auth/register", json={"nome": nome, "email": email, "senha": "senha123"})
-        assert registro.status_code == 201, registro.text
-        headers = {"Authorization": f"Bearer {registro.json()['token']}"}
+        usuario = self.cadastrar_usuario(nome, email)
         paciente = self.client.post(
             "/api/pacientes",
-            headers=headers,
-            json={"nome": nome, "cpf": cpf, "data_nascimento": "1950-03-10", "telefone": "11999990000"},
+            headers=self.admin,
+            json={
+                "usuario_id": usuario["id"],
+                "nome": nome,
+                "cpf": cpf,
+                "data_nascimento": "1950-03-10",
+                "telefone": "11999990000",
+            },
         )
         assert paciente.status_code == 201, paciente.text
-        return headers, paciente.json()["id"]
+        return self.cabecalho_de(usuario["id"]), paciente.json()["id"]
 
     def cadastrar_medico(self, nome: str, crm: str, especialidade: str) -> int:
-        resposta = self.client.post("/api/medicos", json={"nome": nome, "crm": crm, "especialidade": especialidade})
+        resposta = self.client.post(
+            "/api/medicos", headers=self.admin, json={"nome": nome, "crm": crm, "especialidade": especialidade}
+        )
         assert resposta.status_code == 201, resposta.text
         return resposta.json()["id"]
 

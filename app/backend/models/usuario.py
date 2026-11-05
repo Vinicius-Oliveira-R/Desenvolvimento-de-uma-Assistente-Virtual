@@ -1,11 +1,28 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from enum import StrEnum
 
-from sqlalchemy import String
+from sqlalchemy import Enum, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.backend.core.database import Base
+
+
+class PapelUsuario(StrEnum):
+    ADMIN = "admin"
+    MEDICO = "medico"
+    PACIENTE = "paciente"
+
+    def pode_cadastrar(self, papel: PapelUsuario) -> bool:
+        return papel in PAPEIS_CADASTRAVEIS[self]
+
+
+PAPEIS_CADASTRAVEIS: dict[PapelUsuario, frozenset[PapelUsuario]] = {
+    PapelUsuario.ADMIN: frozenset(PapelUsuario),
+    PapelUsuario.MEDICO: frozenset({PapelUsuario.PACIENTE, PapelUsuario.ADMIN}),
+    PapelUsuario.PACIENTE: frozenset(),
+}
 
 
 class Usuario(Base):
@@ -15,7 +32,17 @@ class Usuario(Base):
     nome: Mapped[str] = mapped_column(String(150), nullable=False)
     email: Mapped[str] = mapped_column(String(150), unique=True, index=True, nullable=False)
     senha_hash: Mapped[str] = mapped_column(String(255), nullable=False)
-    tipo: Mapped[str] = mapped_column(String(50), nullable=False, default="paciente")
+    papel: Mapped[PapelUsuario] = mapped_column(
+        Enum(
+            PapelUsuario,
+            native_enum=False,
+            create_constraint=True,
+            length=20,
+            values_callable=lambda papeis: [papel.value for papel in papeis],
+        ),
+        nullable=False,
+        default=PapelUsuario.PACIENTE,
+    )
     data_criacao: Mapped[str] = mapped_column(
         String(30),
         nullable=False,

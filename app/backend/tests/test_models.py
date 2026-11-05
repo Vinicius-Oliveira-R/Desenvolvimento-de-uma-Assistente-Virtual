@@ -4,7 +4,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.backend.core.database import Base
-from app.backend.models import Consulta, Horario, Medico, Paciente, Usuario
+from app.backend.models import Consulta, Horario, Medico, Paciente, PapelUsuario, Usuario
 
 
 @pytest.fixture
@@ -20,7 +20,7 @@ def db_session() -> Session:
 
 
 def test_usuario_paciente_medico_relacionamentos(db_session: Session) -> None:
-    usuario = Usuario(nome="Ana", email="ana@email.com", senha_hash="hash123", tipo="paciente")
+    usuario = Usuario(nome="Ana", email="ana@email.com", senha_hash="hash123", papel=PapelUsuario.PACIENTE)
     db_session.add(usuario)
     db_session.commit()
 
@@ -61,7 +61,7 @@ def test_usuario_paciente_medico_relacionamentos(db_session: Session) -> None:
 
 
 def test_consulta_nao_permite_mesmo_horario_para_mesmo_medico(db_session: Session) -> None:
-    usuario = Usuario(nome="Luis", email="luis@email.com", senha_hash="hash456", tipo="paciente")
+    usuario = Usuario(nome="Luis", email="luis@email.com", senha_hash="hash456", papel=PapelUsuario.PACIENTE)
     db_session.add(usuario)
     db_session.commit()
 
@@ -95,7 +95,7 @@ def test_consulta_nao_permite_mesmo_horario_para_mesmo_medico(db_session: Sessio
 
 
 def test_horario_aceita_novo_agendamento_apos_cancelamentos_repetidos(db_session: Session) -> None:
-    usuario = Usuario(nome="Rita", email="rita@email.com", senha_hash="hash789", tipo="paciente")
+    usuario = Usuario(nome="Rita", email="rita@email.com", senha_hash="hash789", papel=PapelUsuario.PACIENTE)
     db_session.add(usuario)
     db_session.commit()
     paciente = Paciente(usuario_id=usuario.id, nome="Rita Lima", cpf="11122233344", data_nascimento="1948-02-02", telefone="11977777777")

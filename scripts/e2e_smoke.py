@@ -17,6 +17,7 @@ import httpx
 
 MENSAGEM_RESERVADO = "Este horário acabou de ser reservado por outro paciente."
 SENHA_DEMO = "senha123"
+ATENDENTE_DEMO = "recepcao@clinica.com"
 _CSRF = re.compile(r'name="csrfmiddlewaretoken" value="([^"]+)"')
 
 
@@ -70,6 +71,12 @@ class PacienteNoNavegador:
         bolha = re.sub(r"<br\s*/?>", "\n", bolha)
         linhas = (html.unescape(re.sub(r"<[^>]+>", "", linha)).strip() for linha in bolha.splitlines())
         return "\n".join(linha for linha in linhas if linha)
+
+
+def autenticar_atendente(api: httpx.Client) -> None:
+    sessao = api.post("/auth/login", json={"email": ATENDENTE_DEMO, "senha": SENHA_DEMO})
+    verificar(sessao.status_code == 200, f"{ATENDENTE_DEMO} (atendente) faz login na API")
+    api.headers["Authorization"] = f"Bearer {sessao.json()['token']}"
 
 
 def cenario_a(frontend: str) -> None:
@@ -156,6 +163,7 @@ def main() -> int:
 
     with httpx.Client(base_url=args.api, timeout=30) as api:
         try:
+            autenticar_atendente(api)
             cenario_a(args.frontend)
             cenario_b(args.frontend, api)
             cenario_c(args.api, api)

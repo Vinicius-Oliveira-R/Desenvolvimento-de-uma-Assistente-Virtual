@@ -196,18 +196,16 @@ def test_pedido_de_remedio_no_meio_de_um_agendamento_e_bloqueado_sem_marcar_nada
 
 
 def test_usuario_sem_cadastro_de_paciente_e_orientado(api: ClinicaApi) -> None:
-    token = api.client.post(
-        "/api/auth/register", json={"nome": "Sem Cadastro", "email": "sem@email.com", "senha": "senha123"}
-    ).json()["token"]
+    usuario = api.cadastrar_usuario("Sem Cadastro", "sem@email.com")
 
-    resposta = api.conversa({"Authorization": f"Bearer {token}"}).enviar("Quero marcar uma consulta")
+    resposta = api.conversa(api.cabecalho_de(usuario["id"])).enviar("Quero marcar uma consulta")
 
     assert resposta["resultado"] == "paciente_nao_cadastrado"
 
 
 def test_senha_acima_do_limite_do_bcrypt_e_rejeitada(api: ClinicaApi) -> None:
     resposta = api.client.post(
-        "/api/auth/register", json={"nome": "Ana", "email": "ana@email.com", "senha": "ç" * 37}
+        "/api/auth/register", headers=api.admin, json={"nome": "Ana", "email": "ana@email.com", "senha": "ç" * 37}
     )
 
     assert resposta.status_code == 422
