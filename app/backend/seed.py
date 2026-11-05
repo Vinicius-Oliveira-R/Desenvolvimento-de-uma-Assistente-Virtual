@@ -13,6 +13,13 @@ from app.backend.core.security import get_password_hash
 from app.backend.models import Horario, Medico, Paciente, PapelUsuario, Usuario
 
 SENHA_DEMO = "senha123"
+SENHA_TESTE = "123456"
+USUARIOS_DE_TESTE = (
+    ("Paciente de Teste", "paciente@teste.com", PapelUsuario.PACIENTE),
+    ("Dr. Rafael Teixeira", "medico@teste.com", PapelUsuario.MEDICO),
+    ("Atendente de Teste", "atendente@teste.com", PapelUsuario.ADMIN),
+)
+FICHA_DO_PACIENTE_DE_TESTE = {"cpf": "12345678903", "data_nascimento": "1955-03-20", "telefone": "11999990000"}
 FUNCIONARIOS = (
     ("Gestor da Clínica", "gestor@clinica.com", PapelUsuario.GESTOR),
     ("Recepção da Clínica", "recepcao@clinica.com", PapelUsuario.ADMIN),
@@ -23,10 +30,11 @@ PACIENTES = (
     ("Carlos Pereira", "carlos@clinica.com", "12345678902", "1990-08-21"),
 )
 MEDICOS = (
-    ("Dr. João Mendes", "CRM-SP-100001", "Cardiologia"),
-    ("Dra. Maria Silva", "CRM-SP-100002", "Clínica Geral"),
-    ("Dra. Ana Costa", "CRM-SP-100003", "Dermatologia"),
-    ("Dr. Carlos Lima", "CRM-SP-100004", "Ortopedia"),
+    ("Dr. João Mendes", "CRM-SP-100001", "Cardiologia", "joao.mendes@clinica.com"),
+    ("Dra. Maria Silva", "CRM-SP-100002", "Clínica Geral", None),
+    ("Dra. Ana Costa", "CRM-SP-100003", "Dermatologia", None),
+    ("Dr. Carlos Lima", "CRM-SP-100004", "Ortopedia", None),
+    ("Dr. Rafael Teixeira", "CRM-SP-100005", "Neurologia", "medico@teste.com"),
 )
 HORAS = ("08:00", "09:00", "10:00", "11:00", "14:00", "15:00", "16:00", "17:00")
 DIAS_DE_AGENDA = 365
@@ -42,12 +50,20 @@ def main() -> None:
             if db.query(Paciente).filter(Paciente.usuario_id == usuario.id).first() is None:
                 db.add(Paciente(usuario_id=usuario.id, nome=nome, cpf=cpf, data_nascimento=nascimento, telefone="11999990000"))
 
+        for nome, email, papel in USUARIOS_DE_TESTE:
+            usuario = _obter_ou_criar_usuario(db, nome, email, papel, SENHA_TESTE)
+            sem_ficha = db.query(Paciente).filter(Paciente.usuario_id == usuario.id).first() is None
+            if papel == PapelUsuario.PACIENTE and sem_ficha:
+                db.add(Paciente(usuario_id=usuario.id, nome=nome, **FICHA_DO_PACIENTE_DE_TESTE))
+
         medicos = []
-        for nome, crm, especialidade in MEDICOS:
+        for nome, crm, especialidade, email in MEDICOS:
             medico = db.query(Medico).filter(Medico.crm == crm).first()
             if medico is None:
                 medico = Medico(nome=nome, crm=crm, especialidade=especialidade)
                 db.add(medico)
+            if email and medico.usuario_id is None:
+                medico.usuario_id = db.query(Usuario.id).filter(Usuario.email == email).scalar()
             medicos.append(medico)
         db.flush()
 
@@ -68,12 +84,15 @@ def main() -> None:
     usuarios += [(email, PapelUsuario.PACIENTE) for _, email, _, _ in PACIENTES]
     print(f"Seed concluído: {len(novos)} horários criados.")
     print(f"Usuários de demonstração (senha '{SENHA_DEMO}'): " + ", ".join(f"{e} ({p})" for e, p in usuarios))
+    print(f"Usuários de teste (senha '{SENHA_TESTE}'): " + ", ".join(f"{e} ({p})" for _, e, p in USUARIOS_DE_TESTE))
 
 
-def _obter_ou_criar_usuario(db: Session, nome: str, email: str, papel: PapelUsuario) -> Usuario:
+def _obter_ou_criar_usuario(
+    db: Session, nome: str, email: str, papel: PapelUsuario, senha: str = SENHA_DEMO
+) -> Usuario:
     usuario = db.query(Usuario).filter(Usuario.email == email).first()
     if usuario is None:
-        usuario = Usuario(nome=nome, email=email, senha_hash=get_password_hash(SENHA_DEMO), papel=papel)
+        usuario = Usuario(nome=nome, email=email, senha_hash=get_password_hash(senha), papel=papel)
         db.add(usuario)
         db.flush()
     return usuario

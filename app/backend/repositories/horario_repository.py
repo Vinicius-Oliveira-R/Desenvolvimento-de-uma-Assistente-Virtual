@@ -28,6 +28,18 @@ class HorarioRepository:
         self.db.refresh(horario)
         return horario
 
+    def add_all(self, horarios: Sequence[Horario]) -> None:
+        self.db.add_all(horarios)
+        self.db.commit()
+
+    def chaves_no_periodo(self, medico_id: int, data_inicio: str, data_fim: str) -> set[tuple[str, str]]:
+        linhas = (
+            self.db.query(Horario.data, Horario.hora_inicio)
+            .filter(Horario.medico_id == medico_id, Horario.data >= data_inicio, Horario.data <= data_fim)
+            .all()
+        )
+        return {(data, hora) for data, hora in linhas}
+
     def list_all(self) -> list[Horario]:
         return self.db.query(Horario).all()
 

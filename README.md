@@ -49,12 +49,12 @@ Pipeline do assistente (`POST /api/assistant/chat`):
 
 Cada usuário tem um `papel`: `gestor` (responsável pela clínica), `admin` (atendente), `medico` ou `paciente`. O papel é conferido no banco a cada requisição, a partir do usuário identificado pelo token JWT.
 
-| Usuário logado | Cadastra usuários (`POST /api/auth/register`) | Pacientes (`POST`/`GET /api/pacientes`) | Médicos (`POST /api/medicos`) | Consultas (`/api/consultas`) |
-|---|---|---|---|---|
-| `gestor` | médicos e atendentes | não | sim | não |
-| `admin` | pacientes e atendentes | sim | não | agenda, remarca e cancela |
-| `medico` | pacientes, atendentes e médicos | sim | sim | agenda, remarca e cancela |
-| `paciente` | não | não | não | só as próprias (`/api/consultas/minhas`) e pelo assistente |
+| Usuário logado | Cadastra usuários (`POST /api/auth/register`) | Pacientes (`POST`/`GET /api/pacientes`) | Médicos (`POST /api/medicos`) | Consultas (`/api/consultas`) | Horários (`POST /api/horarios` e `/lote`) |
+|---|---|---|---|---|---|
+| `gestor` | médicos e atendentes | não | sim | não | não |
+| `admin` | pacientes e atendentes | sim | não | agenda, remarca e cancela | libera |
+| `medico` | pacientes, atendentes e médicos | sim | sim | agenda, remarca e cancela | libera |
+| `paciente` | não | não | não | só as próprias (`/api/consultas/minhas`) e pelo assistente | não |
 
 Ninguém cadastra um `gestor` pela API, nem outro gestor: essa conta só é criada direto no banco, pelo seed. As permissões de cadastro ficam em um único lugar, `PAPEIS_CADASTRAVEIS` em `app/backend/models/usuario.py`.
 
@@ -94,6 +94,13 @@ ALTER TABLE usuarios DROP CONSTRAINT IF EXISTS papelusuario;
 ALTER TABLE usuarios ADD CONSTRAINT papelusuario CHECK (papel IN ('gestor', 'admin', 'medico', 'paciente'));
 ```
 
+Qualquer banco criado antes do vínculo entre a conta do médico e a ficha dele:
+
+```sql
+ALTER TABLE medicos ADD COLUMN usuario_id INTEGER REFERENCES usuarios(id);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_medicos_usuario_id ON medicos (usuario_id);
+```
+
 ## Execução
 
 Na raiz do projeto:
@@ -111,7 +118,18 @@ python manage.py migrate
 python manage.py runserver 8001                 # front-end em http://127.0.0.1:8001
 ```
 
-Usuários de demonstração (senha `senha123`): `gestor@clinica.com` (`gestor`), `recepcao@clinica.com` (atendente, `admin`), `joao.mendes@clinica.com` (`medico`), `lurdes@clinica.com` e `carlos@clinica.com` (`paciente`). No site Django, pacientes caem no chat; gestor, atendentes e médicos caem no painel da equipe, onde cadastram usuários (com a ficha de paciente ou de médico) e, conforme o perfil, consultam a lista de pacientes. Atendentes e médicos também gerenciam as consultas: agenda com filtros, novo agendamento, remarcação e cancelamento (alterações e cancelamentos exigem marcar que o paciente confirmou).
+Usuários de demonstração (senha `senha123`): `gestor@clinica.com` (`gestor`), `recepcao@clinica.com` (atendente, `admin`), `joao.mendes@clinica.com` (`medico`), `lurdes@clinica.com` e `carlos@clinica.com` (`paciente`). Usuários de teste (senha `123456`): `paciente@teste.com`, `medico@teste.com` (Dr. Rafael Teixeira, Neurologia) e `atendente@teste.com`.
+
+Depois do login, `/inicio/` leva cada perfil à sua área:
+
+| Perfil | Área inicial | O que encontra |
+|---|---|---|
+| paciente | `/` (chat) | assistente e `/calendario/` com as próprias consultas |
+| médico | `/medico/agenda/` | consultas do dia na própria agenda, além de tudo o que a atendente faz |
+| atendente | `/gestao/` | painel com pacientes, cadastro de usuários, `/gestao/consultas/` (agendar, remarcar e cancelar) e `/gestao/horarios/` (liberar horários) |
+| gestor | `/gestao/` | cadastro de médicos e atendentes |
+
+Alterações e cancelamentos de consulta exigem marcar que o paciente confirmou.
 
 ## Testes
 

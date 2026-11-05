@@ -28,6 +28,7 @@ class AsyncLoginRequiredMixin(LoginRequiredMixin):
 class ClinicaApiMixin(AsyncLoginRequiredMixin):
     papeis_permitidos: frozenset[str] = frozenset({PACIENTE})
     token: str
+    papel: str
 
     async def dispatch(self, request: HttpRequest, *args, **kwargs) -> HttpResponse:
         if (await request.auser()).is_authenticated:
@@ -37,7 +38,7 @@ class ClinicaApiMixin(AsyncLoginRequiredMixin):
                 return await self.end_session(request)
             if papel not in self.papeis_permitidos:
                 return redirect(pagina_inicial(papel))
-            self.token = token
+            self.token, self.papel = token, papel
         try:
             return await super().dispatch(request, *args, **kwargs)
         except SessaoExpiradaError:

@@ -132,7 +132,7 @@ STATICFILES_DIRS = [
 ]
 
 # Redirecionamentos de Autenticação
-LOGIN_REDIRECT_URL = 'chat'
+LOGIN_REDIRECT_URL = 'inicio'
 LOGIN_URL = 'login'
 LOGOUT_REDIRECT_URL = 'login'
 

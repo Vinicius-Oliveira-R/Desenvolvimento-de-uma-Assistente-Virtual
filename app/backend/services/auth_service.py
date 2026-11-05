@@ -40,7 +40,7 @@ class AuthService:
             if payload.paciente:
                 self.db.add(Paciente(usuario_id=usuario.id, nome=payload.nome, **payload.paciente.model_dump()))
             if payload.medico:
-                self.db.add(Medico(nome=payload.nome, **payload.medico.model_dump()))
+                self.db.add(Medico(nome=payload.nome, usuario_id=usuario.id, **payload.medico.model_dump()))
             self.db.commit()
         except IntegrityError as exc:
             self.db.rollback()

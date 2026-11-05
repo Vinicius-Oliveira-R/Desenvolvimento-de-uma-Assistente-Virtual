@@ -83,7 +83,9 @@ def test_horario_com_formato_invalido_e_rejeitado(api: ClinicaApi) -> None:
     medico = api.cadastrar_medico("Dr. João", "CRM-SP-1", "Cardiologia")
 
     resposta = api.client.post(
-        "/api/horarios", json={"medico_id": medico, "data": "10/11/2026", "hora_inicio": "9h", "hora_fim": "09:30"}
+        "/api/horarios",
+        headers=api.admin,
+        json={"medico_id": medico, "data": "10/11/2026", "hora_inicio": "9h", "hora_fim": "09:30"},
     )
 
     assert resposta.status_code == 422

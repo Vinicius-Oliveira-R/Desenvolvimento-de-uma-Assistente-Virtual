@@ -31,12 +31,20 @@
             </div>
 
             <nav class="sidebar-nav">
+                {% if e_medico %}
+                <a href="{% url 'agenda_medica' %}" class="nav-item {% if request.resolver_match.url_name == 'agenda_medica' %}active{% endif %}">
+                    <i class="bi bi-calendar-day me-2"></i> Minha agenda
+                </a>
+                {% endif %}
                 <a href="{% url 'equipe' %}" class="nav-item {% if request.resolver_match.url_name == 'equipe' %}active{% endif %}">
                     <i class="bi bi-people me-2"></i> Painel da equipe
                 </a>
                 {% if gerencia_consultas %}
                 <a href="{% url 'consultas' %}" class="nav-item {% if request.resolver_match.url_name in 'consultas nova_consulta editar_consulta' %}active{% endif %}">
                     <i class="bi bi-calendar-check me-2"></i> Consultas
+                </a>
+                <a href="{% url 'liberar_horarios' %}" class="nav-item {% if request.resolver_match.url_name == 'liberar_horarios' %}active{% endif %}">
+                    <i class="bi bi-clock-history me-2"></i> Liberar horários
                 </a>
                 {% endif %}
                 <a href="{% url 'cadastro_usuario' %}" class="nav-item {% if request.resolver_match.url_name == 'cadastro_usuario' %}active{% endif %}">

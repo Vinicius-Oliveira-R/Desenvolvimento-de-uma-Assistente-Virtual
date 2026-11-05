@@ -1,5 +1,6 @@
 import json
 from collections.abc import Callable
+from datetime import timedelta
 from unittest import mock
 
 import httpx
@@ -59,7 +60,8 @@ class LoginTests(ApiFalsaMixin, TestCase):
 
         resposta = self.client.post(reverse("login"), {"username": "lurdes@email.com", "password": "senha123"})
 
-        self.assertRedirects(resposta, reverse("chat"))
+        self.assertRedirects(resposta, reverse("inicio"), fetch_redirect_response=False)
+        self.assertRedirects(self.client.get(reverse("inicio")), reverse("chat"), fetch_redirect_response=False)
         self.assertEqual(self.client.session[SessaoAssistente.TOKEN], "jwt-abc")
         self.assertEqual(requisicoes[0].url.path, "/api/auth/login")
         self.assertEqual(get_user_model().objects.get(username="lurdes@email.com").first_name, "Lurdes")
@@ -224,7 +226,8 @@ class AreaDaEquipeTests(ApiFalsaMixin, TestCase):
 
         resposta = self.client.post(reverse("login"), {"username": "recepcao@email.com", "password": "senha123"})
 
-        self.assertRedirects(resposta, reverse("equipe"), fetch_redirect_response=False)
+        self.assertRedirects(resposta, reverse("inicio"), fetch_redirect_response=False)
+        self.assertRedirects(self.client.get(reverse("inicio")), reverse("equipe"), fetch_redirect_response=False)
         self.assertEqual(self.client.session[SessaoAssistente.PAPEL], "admin")
 
     def test_equipe_nao_usa_o_chat_e_paciente_nao_entra_no_painel(self) -> None:
@@ -462,3 +465,86 @@ class GestaoDeConsultasTests(ApiFalsaMixin, TestCase):
         self.assertRedirects(resposta, reverse("editar_consulta", args=[5]))
         self.assertContains(resposta, "Marque a confirmação do paciente para cancelar a consulta.")
         self.assertFalse(any(r.method == "DELETE" for r in requisicoes))
+
+
+class PainelPorPapelTests(ApiFalsaMixin, TestCase):
+    def test_inicio_leva_cada_papel_a_sua_area(self) -> None:
+        destinos = {"paciente": "chat", "medico": "agenda_medica", "admin": "equipe", "gestor": "equipe"}
+        self.autenticar()
+        for papel, destino in destinos.items():
+            sessao = self.client.session
+            sessao[SessaoAssistente.PAPEL] = papel
+            sessao.save()
+
+            resposta = self.client.get(reverse("inicio"))
+
+            self.assertRedirects(resposta, reverse(destino), fetch_redirect_response=False, msg_prefix=papel)
+
+    def test_agenda_do_medico_mostra_somente_as_consultas_dele_no_dia(self) -> None:
+        self.autenticar(papel="medico")
+        perfil = {**PERFIL_ATENDENTE, "papel": "medico", "medico_id": 3}
+        requisicoes = self.usar_api(_api_da_equipe({"GET /api/auth/me": (200, perfil), **API_DA_AGENDA}))
+
+        resposta = self.client.get(reverse("agenda_medica"), {"data": "2026-11-10"})
+
+        self.assertContains(resposta, "Lurdes Andrade")
+        self.assertContains(resposta, reverse("editar_consulta", args=[5]))
+        agenda = next(r for r in requisicoes if r.url.path == "/api/consultas")
+        self.assertEqual(
+            dict(agenda.url.params), {"medico_id": "3", "data_inicio": "2026-11-10", "data_fim": "2026-11-10"}
+        )
+
+    def test_medico_sem_ficha_vinculada_e_orientado(self) -> None:
+        self.autenticar(papel="medico")
+        sem_ficha = {**PERFIL_ATENDENTE, "papel": "medico"}
+        requisicoes = self.usar_api(_api_da_equipe({"GET /api/auth/me": (200, sem_ficha)}))
+
+        resposta = self.client.get(reverse("agenda_medica"))
+
+        self.assertContains(resposta, "Sua conta ainda não está vinculada a uma ficha de médico")
+        self.assertFalse(any(r.url.path == "/api/consultas" for r in requisicoes))
+
+    def test_atendente_nao_abre_a_agenda_pessoal_do_medico(self) -> None:
+        self.autenticar(papel="admin")
+
+        resposta = self.client.get(reverse("agenda_medica"))
+
+        self.assertRedirects(resposta, reverse("equipe"), fetch_redirect_response=False)
+
+    def test_liberacao_de_horarios_envia_o_pedido_a_api(self) -> None:
+        self.autenticar(papel="admin")
+        requisicoes = self.usar_api(
+            _api_da_equipe({**API_DA_AGENDA, "POST /api/horarios/lote": (201, {"criados": 20, "ja_existentes": 4})})
+        )
+        amanha = timezone.localdate() + timedelta(days=1)
+
+        resposta = self.client.post(
+            reverse("liberar_horarios"),
+            {
+                "medico_id": "3", "data_inicio": amanha.isoformat(),
+                "data_fim": (amanha + timedelta(days=6)).isoformat(),
+                "dias_semana": ["0", "2"], "hora_inicio": "08:00", "hora_fim": "10:00", "duracao_minutos": "30",
+            },
+            follow=True,
+        )
+
+        self.assertContains(resposta, "20 horários liberados. 4 já existiam e foram mantidos.")
+        pedido = json.loads(next(r for r in requisicoes if r.url.path == "/api/horarios/lote").content)
+        self.assertEqual(pedido["dias_semana"], [0, 2])
+        self.assertEqual((pedido["medico_id"], pedido["hora_inicio"], pedido["hora_fim"]), (3, "08:00", "10:00"))
+
+    def test_liberacao_em_data_passada_e_barrada_antes_da_api(self) -> None:
+        self.autenticar(papel="admin")
+        requisicoes = self.usar_api(_api_da_equipe(API_DA_AGENDA))
+        ontem = timezone.localdate() - timedelta(days=1)
+
+        resposta = self.client.post(
+            reverse("liberar_horarios"),
+            {
+                "medico_id": "3", "data_inicio": ontem.isoformat(), "data_fim": ontem.isoformat(),
+                "dias_semana": ["0"], "hora_inicio": "08:00", "hora_fim": "10:00", "duracao_minutos": "30",
+            },
+        )
+
+        self.assertContains(resposta, "Escolha hoje ou uma data futura.")
+        self.assertFalse(any(r.url.path == "/api/horarios/lote" for r in requisicoes))

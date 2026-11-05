@@ -50,6 +50,7 @@ class SessaoOut(UsuarioOut):
 
 class PerfilOut(UsuarioOut):
     papeis_cadastraveis: list[PapelUsuario]
+    medico_id: int | None = None
 
     @classmethod
     def from_usuario(cls, usuario: Usuario) -> "PerfilOut":
@@ -59,4 +60,5 @@ class PerfilOut(UsuarioOut):
             email=usuario.email,
             papel=usuario.papel,
             papeis_cadastraveis=usuario.papel.papeis_cadastraveis(),
+            medico_id=usuario.medico.id if usuario.medico else None,
         )

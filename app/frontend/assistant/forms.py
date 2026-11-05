@@ -1,5 +1,6 @@
 import re
 from collections.abc import Sequence
+from datetime import date, timedelta
 from typing import Any
 
 from django import forms
@@ -110,6 +111,10 @@ def _campo_de_data() -> forms.DateInput:
     return forms.DateInput(attrs={"type": "date"}, format="%Y-%m-%d")
 
 
+def _campo_de_hora() -> forms.TimeInput:
+    return forms.TimeInput(attrs={"type": "time"}, format="%H:%M")
+
+
 def _recarregar_horarios_ao_mudar(form: forms.Form, url_horarios: str) -> None:
     gatilho = {
         "hx-get": url_horarios,
@@ -216,3 +221,60 @@ class CancelamentoForm(forms.Form):
     prefix = "cancelamento"
 
     confirmado = forms.BooleanField(label="O paciente confirmou o cancelamento")
+
+
+class LiberacaoHorariosForm(forms.Form):
+    MAXIMO_DE_DIAS = 92
+    DIAS_DA_SEMANA = (
+        ("0", "Segunda"), ("1", "Terça"), ("2", "Quarta"), ("3", "Quinta"),
+        ("4", "Sexta"), ("5", "Sábado"), ("6", "Domingo"),
+    )
+    DIAS_UTEIS = ["0", "1", "2", "3", "4"]
+    DURACOES = (
+        ("15", "15 minutos"), ("20", "20 minutos"), ("30", "30 minutos"), ("45", "45 minutos"), ("60", "1 hora")
+    )
+
+    medico_id = forms.TypedChoiceField(label="Médico", coerce=int)
+    data_inicio = forms.DateField(label="De", widget=_campo_de_data())
+    data_fim = forms.DateField(label="Até", widget=_campo_de_data())
+    dias_semana = forms.MultipleChoiceField(
+        label="Dias da semana", choices=DIAS_DA_SEMANA, widget=forms.CheckboxSelectMultiple, initial=DIAS_UTEIS
+    )
+    hora_inicio = forms.TimeField(label="Das", widget=_campo_de_hora(), initial="08:00")
+    hora_fim = forms.TimeField(label="Até as", widget=_campo_de_hora(), initial="12:00")
+    duracao_minutos = forms.TypedChoiceField(
+        label="Duração de cada consulta", choices=DURACOES, coerce=int, initial="30"
+    )
+
+    def __init__(self, *args, medicos: Sequence[MedicoResumo], medico_inicial: int | None, hoje: date, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.hoje = hoje
+        self.fields["medico_id"].choices = _opcoes_de_medico(medicos, "Selecione")
+        self.fields["medico_id"].initial = medico_inicial
+        self.fields["data_inicio"].initial = hoje
+        self.fields["data_fim"].initial = hoje + timedelta(days=6)
+
+    def clean(self) -> dict[str, Any]:
+        dados = super().clean()
+        inicio, fim = dados.get("data_inicio"), dados.get("data_fim")
+        if inicio and inicio < self.hoje:
+            self.add_error("data_inicio", "Escolha hoje ou uma data futura.")
+        if inicio and fim and fim < inicio:
+            self.add_error("data_fim", "A data final deve ser igual ou posterior à inicial.")
+        elif inicio and fim and (fim - inicio).days >= self.MAXIMO_DE_DIAS:
+            self.add_error("data_fim", f"Libere no máximo {self.MAXIMO_DE_DIAS} dias por vez.")
+        if dados.get("hora_inicio") and dados.get("hora_fim") and dados["hora_fim"] <= dados["hora_inicio"]:
+            self.add_error("hora_fim", "O horário final deve ser depois do inicial.")
+        return dados
+
+    def dados_para_api(self) -> dict[str, Any]:
+        dados = self.cleaned_data
+        return {
+            "medico_id": dados["medico_id"],
+            "data_inicio": dados["data_inicio"].isoformat(),
+            "data_fim": dados["data_fim"].isoformat(),
+            "dias_semana": [int(dia) for dia in dados["dias_semana"]],
+            "hora_inicio": dados["hora_inicio"].strftime("%H:%M"),
+            "hora_fim": dados["hora_fim"].strftime("%H:%M"),
+            "duracao_minutos": dados["duracao_minutos"],
+        }

@@ -41,10 +41,11 @@ class SessaoApi:
 class Perfil:
     papel: str
     papeis_cadastraveis: tuple[str, ...]
+    medico_id: int | None = None
 
     @classmethod
     def from_json(cls, dados: dict[str, Any]) -> "Perfil":
-        return cls(dados["papel"], tuple(dados["papeis_cadastraveis"]))
+        return cls(dados["papel"], tuple(dados["papeis_cadastraveis"]), dados.get("medico_id"))
 
 
 @dataclass(frozen=True)
@@ -226,6 +227,9 @@ class ClinicaApiClient:
         filtros = {"medico_id": medico_id, "data": data.isoformat(), "disponivel": "true"}
         dados = await self._requisitar("GET", "/horarios", token, params=filtros)
         return [HorarioLivre.from_json(item) for item in dados]
+
+    async def release_slots(self, token: str, dados: dict[str, Any]) -> dict[str, int]:
+        return await self._requisitar("POST", "/horarios/lote", token, json=dados)
 
     async def _requisitar(self, metodo: str, caminho: str, token: str, **opcoes: Any) -> Any:
         try:

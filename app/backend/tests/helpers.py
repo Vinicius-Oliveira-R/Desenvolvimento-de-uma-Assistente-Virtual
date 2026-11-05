@@ -87,7 +87,9 @@ class ClinicaApi:
     def cadastrar_horario(self, medico_id: int, data: str, hora_inicio: str) -> int:
         fim = (datetime.strptime(hora_inicio, "%H:%M") + timedelta(minutes=30)).strftime("%H:%M")
         resposta = self.client.post(
-            "/api/horarios", json={"medico_id": medico_id, "data": data, "hora_inicio": hora_inicio, "hora_fim": fim}
+            "/api/horarios",
+            headers=self.admin,
+            json={"medico_id": medico_id, "data": data, "hora_inicio": hora_inicio, "hora_fim": fim},
         )
         assert resposta.status_code == 201, resposta.text
         return resposta.json()["id"]

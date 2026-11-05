@@ -1,6 +1,6 @@
 import asyncio
 from collections.abc import Mapping
-from datetime import date
+from datetime import date, timedelta
 
 from django.conf import settings
 from django.contrib import messages
@@ -21,12 +21,13 @@ from assistant.forms import (
     CadastroUsuarioForm,
     CancelamentoForm,
     FiltroConsultasForm,
+    LiberacaoHorariosForm,
     LoginForm,
     MensagemForm,
     opcoes_de_horario,
 )
 from assistant.mixins import ClinicaApiMixin
-from assistant.perfis import EQUIPE, EQUIPE_CLINICA, PACIENTE, ROTULOS, pagina_inicial
+from assistant.perfis import EQUIPE, EQUIPE_CLINICA, MEDICO, ROTULOS, TODOS, pagina_inicial
 from assistant.session import SessaoAssistente
 
 API_INDISPONIVEL = "O sistema da clínica está indisponível no momento. Tente novamente em instantes."
@@ -50,8 +51,12 @@ class ClinicaLoginView(LoginView):
         SessaoAssistente.iniciar(self.request.session, usuario.api_token, usuario.api_papel)
         return resposta
 
-    def get_default_redirect_url(self) -> str:
-        return pagina_inicial(getattr(self.request.user, "api_papel", PACIENTE))
+
+class DashboardRedirectView(ClinicaApiMixin, View):
+    papeis_permitidos = TODOS
+
+    async def get(self, request: HttpRequest, *args, **kwargs) -> HttpResponse:
+        return redirect(pagina_inicial(self.papel))
 
 
 class ChatView(ClinicaApiMixin, TemplateView):
@@ -293,3 +298,64 @@ class HorariosLivresView(GestaoConsultasMixin, View):
             vazio = "Selecione" if horarios else "Nenhum horário livre nesse dia"
         contexto = {"opcoes": opcoes_de_horario(horarios, vazio)}
         return TemplateResponse(request, "equipe/partials/opcoes_horario.html", contexto)
+
+
+class AgendaMedicaView(ClinicaApiMixin, TemplateView):
+    template_name = "medico/agenda.html"
+    papeis_permitidos = frozenset({MEDICO})
+
+    async def get(self, request: HttpRequest, *args, **kwargs) -> HttpResponse:
+        try:
+            dia = date.fromisoformat(request.GET["data"])
+        except (KeyError, ValueError):
+            dia = timezone.localdate()
+
+        cliente = self.get_api_client()
+        try:
+            perfil = await cliente.get_profile(self.token)
+            filtros = {"medico_id": str(perfil.medico_id), "data_inicio": dia.isoformat(), "data_fim": dia.isoformat()}
+            consultas = await cliente.list_appointments(self.token, filtros) if perfil.medico_id else []
+        except ApiError:
+            return self.render_to_response(self.get_context_data(erro=API_INDISPONIVEL, dia=dia))
+        contexto = self.get_context_data(
+            dia=dia,
+            anterior=dia - timedelta(days=1),
+            seguinte=dia + timedelta(days=1),
+            e_hoje=dia == timezone.localdate(),
+            consultas=consultas,
+            sem_ficha=perfil.medico_id is None,
+        )
+        return self.render_to_response(contexto)
+
+
+class LiberarHorariosView(ClinicaApiMixin, TemplateView):
+    template_name = "equipe/horarios.html"
+    papeis_permitidos = EQUIPE_CLINICA
+
+    async def get(self, request: HttpRequest, *args, **kwargs) -> HttpResponse:
+        return await self._atender(request, None)
+
+    async def post(self, request: HttpRequest, *args, **kwargs) -> HttpResponse:
+        return await self._atender(request, request.POST)
+
+    async def _atender(self, request: HttpRequest, dados: QueryDict | None) -> HttpResponse:
+        cliente = self.get_api_client()
+        try:
+            medicos, perfil = await asyncio.gather(cliente.list_doctors(self.token), cliente.get_profile(self.token))
+        except ApiError:
+            return self.render_to_response(self.get_context_data(erro=API_INDISPONIVEL))
+
+        form = LiberacaoHorariosForm(
+            dados, medicos=medicos, medico_inicial=perfil.medico_id, hoje=timezone.localdate()
+        )
+        if dados is not None and form.is_valid():
+            try:
+                resultado = await cliente.release_slots(self.token, form.dados_para_api())
+            except ApiError as exc:
+                form.add_error(None, exc.mensagem)
+            else:
+                repetidos = resultado["ja_existentes"]
+                aviso = f" {repetidos} já existiam e foram mantidos." if repetidos else ""
+                messages.success(request, f"{resultado['criados']} horários liberados.{aviso}")
+                return redirect("liberar_horarios")
+        return self.render_to_response(self.get_context_data(form=form))

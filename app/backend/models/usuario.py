@@ -57,3 +57,4 @@ class Usuario(Base):
     )
 
     paciente: Mapped["Paciente | None"] = relationship(back_populates="usuario")
+    medico: Mapped["Medico | None"] = relationship(back_populates="usuario")
