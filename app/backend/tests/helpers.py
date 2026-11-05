@@ -31,6 +31,7 @@ class ClinicaApi:
     def __init__(self, client: TestClient):
         self.client = client
         self.admin = self.criar_usuario_no_banco("Recepção", "recepcao@email.com", PapelUsuario.ADMIN)
+        self.medico = self.criar_usuario_no_banco("Dr. Plantonista", "plantonista@email.com", PapelUsuario.MEDICO)
 
     @staticmethod
     def criar_usuario_no_banco(nome: str, email: str, papel: PapelUsuario) -> dict[str, str]:
@@ -54,7 +55,7 @@ class ClinicaApi:
     def cadastrar_usuario(self, nome: str, email: str, papel: PapelUsuario = PapelUsuario.PACIENTE) -> dict[str, Any]:
         resposta = self.client.post(
             "/api/auth/register",
-            headers=self.admin,
+            headers=self.medico if papel == PapelUsuario.MEDICO else self.admin,
             json={"nome": nome, "email": email, "senha": SENHA_PADRAO, "papel": papel},
         )
         assert resposta.status_code == 201, resposta.text
@@ -78,7 +79,7 @@ class ClinicaApi:
 
     def cadastrar_medico(self, nome: str, crm: str, especialidade: str) -> int:
         resposta = self.client.post(
-            "/api/medicos", headers=self.admin, json={"nome": nome, "crm": crm, "especialidade": especialidade}
+            "/api/medicos", headers=self.medico, json={"nome": nome, "crm": crm, "especialidade": especialidade}
         )
         assert resposta.status_code == 201, resposta.text
         return resposta.json()["id"]

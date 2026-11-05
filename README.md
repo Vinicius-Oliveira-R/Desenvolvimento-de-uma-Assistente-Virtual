@@ -51,8 +51,8 @@ Cada usuário tem um `papel`: `admin` (atendente), `medico` ou `paciente`. O pap
 
 | Usuário logado | Cadastra usuários (`POST /api/auth/register`) | Pacientes (`POST`/`GET /api/pacientes`) | Médicos (`POST /api/medicos`) |
 |---|---|---|---|
-| `admin` | pacientes, médicos e atendentes | sim | sim |
-| `medico` | pacientes e atendentes | sim | não |
+| `admin` | pacientes e atendentes | sim | não |
+| `medico` | pacientes, atendentes e médicos | sim | sim |
 | `paciente` | não | não | não |
 
 O cadastro de um paciente tem duas etapas: `POST /api/auth/register` cria o usuário (com o `papel`) e `POST /api/pacientes` cria a ficha vinculada a ele (`usuario_id`). Sem token, essas rotas respondem 401; com um perfil sem permissão, 403.

@@ -19,8 +19,8 @@ class PapelUsuario(StrEnum):
 
 
 PAPEIS_CADASTRAVEIS: dict[PapelUsuario, frozenset[PapelUsuario]] = {
-    PapelUsuario.ADMIN: frozenset(PapelUsuario),
-    PapelUsuario.MEDICO: frozenset({PapelUsuario.PACIENTE, PapelUsuario.ADMIN}),
+    PapelUsuario.ADMIN: frozenset({PapelUsuario.ADMIN, PapelUsuario.PACIENTE}),
+    PapelUsuario.MEDICO: frozenset(PapelUsuario),
     PapelUsuario.PACIENTE: frozenset(),
 }
 

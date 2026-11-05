@@ -39,7 +39,7 @@ def require_roles(*papeis: PapelUsuario) -> Callable[..., Usuario]:
     return verificar_papel
 
 
-require_admin = require_roles(PapelUsuario.ADMIN)
+require_medico = require_roles(PapelUsuario.MEDICO)
 require_admin_or_medico = require_roles(PapelUsuario.ADMIN, PapelUsuario.MEDICO)
 
 

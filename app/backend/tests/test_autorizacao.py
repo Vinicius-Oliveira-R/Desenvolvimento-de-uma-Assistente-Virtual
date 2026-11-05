@@ -27,11 +27,11 @@ def _dados_de_paciente(usuario_id: int, cpf: str = "12345678900") -> dict[str, o
     ("solicitante", "papel_novo", "status"),
     [
         (ADMIN, PACIENTE, 201),
-        (ADMIN, MEDICO, 201),
         (ADMIN, ADMIN, 201),
+        (ADMIN, MEDICO, 403),
         (MEDICO, PACIENTE, 201),
         (MEDICO, ADMIN, 201),
-        (MEDICO, MEDICO, 403),
+        (MEDICO, MEDICO, 201),
         (PACIENTE, PACIENTE, 403),
         (PACIENTE, ADMIN, 403),
         (None, ADMIN, 401),
@@ -52,8 +52,8 @@ def test_cadastro_de_usuarios_segue_a_matriz_de_permissoes(
         assert "token" not in resposta.json()
 
 
-@pytest.mark.parametrize(("solicitante", "status"), [(ADMIN, 201), (MEDICO, 403), (PACIENTE, 403), (None, 401)])
-def test_somente_atendente_cadastra_medico(api: ClinicaApi, solicitante: PapelUsuario | None, status: int) -> None:
+@pytest.mark.parametrize(("solicitante", "status"), [(MEDICO, 201), (ADMIN, 403), (PACIENTE, 403), (None, 401)])
+def test_somente_medico_cadastra_medico(api: ClinicaApi, solicitante: PapelUsuario | None, status: int) -> None:
     resposta = api.client.post("/api/medicos", headers=_logado_como(api, solicitante), json=NOVO_MEDICO)
 
     assert resposta.status_code == status, resposta.text
