@@ -10,6 +10,7 @@ from app.backend.core.database import Base
 
 
 class PapelUsuario(StrEnum):
+    GESTOR = "gestor"
     ADMIN = "admin"
     MEDICO = "medico"
     PACIENTE = "paciente"
@@ -18,9 +19,11 @@ class PapelUsuario(StrEnum):
         return papel in PAPEIS_CADASTRAVEIS[self]
 
 
+# O gestor não aparece como alvo em nenhum perfil: ninguém o cadastra pela API, nem outro gestor.
 PAPEIS_CADASTRAVEIS: dict[PapelUsuario, frozenset[PapelUsuario]] = {
+    PapelUsuario.GESTOR: frozenset({PapelUsuario.MEDICO, PapelUsuario.ADMIN}),
+    PapelUsuario.MEDICO: frozenset({PapelUsuario.MEDICO, PapelUsuario.ADMIN, PapelUsuario.PACIENTE}),
     PapelUsuario.ADMIN: frozenset({PapelUsuario.ADMIN, PapelUsuario.PACIENTE}),
-    PapelUsuario.MEDICO: frozenset(PapelUsuario),
     PapelUsuario.PACIENTE: frozenset(),
 }
 
@@ -35,6 +38,7 @@ class Usuario(Base):
     papel: Mapped[PapelUsuario] = mapped_column(
         Enum(
             PapelUsuario,
+            name="papelusuario",
             native_enum=False,
             create_constraint=True,
             length=20,

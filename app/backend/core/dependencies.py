@@ -39,7 +39,15 @@ def require_roles(*papeis: PapelUsuario) -> Callable[..., Usuario]:
     return verificar_papel
 
 
-require_medico = require_roles(PapelUsuario.MEDICO)
+def require_can_register(papel: PapelUsuario) -> Callable[..., Usuario]:
+    def verificar_cadastro(usuario: Usuario = Depends(get_current_user)) -> Usuario:
+        if not usuario.papel.pode_cadastrar(papel):
+            raise ForbiddenError("Seu perfil não tem permissão para esta operação")
+        return usuario
+
+    return verificar_cadastro
+
+
 require_admin_or_medico = require_roles(PapelUsuario.ADMIN, PapelUsuario.MEDICO)
 
 

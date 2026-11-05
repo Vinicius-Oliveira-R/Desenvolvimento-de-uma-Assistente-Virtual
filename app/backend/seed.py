@@ -14,6 +14,7 @@ from app.backend.models import Horario, Medico, Paciente, PapelUsuario, Usuario
 
 SENHA_DEMO = "senha123"
 FUNCIONARIOS = (
+    ("Gestor da Clínica", "gestor@clinica.com", PapelUsuario.GESTOR),
     ("Recepção da Clínica", "recepcao@clinica.com", PapelUsuario.ADMIN),
     ("Dr. João Mendes", "joao.mendes@clinica.com", PapelUsuario.MEDICO),
 )

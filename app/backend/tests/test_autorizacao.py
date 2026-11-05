@@ -5,7 +5,7 @@ from app.backend.core.database import SessionLocal
 from app.backend.models import PapelUsuario, Usuario
 from app.backend.tests.helpers import SENHA_PADRAO, ClinicaApi
 
-ADMIN, MEDICO, PACIENTE = PapelUsuario.ADMIN, PapelUsuario.MEDICO, PapelUsuario.PACIENTE
+GESTOR, ADMIN, MEDICO, PACIENTE = PapelUsuario.GESTOR, PapelUsuario.ADMIN, PapelUsuario.MEDICO, PapelUsuario.PACIENTE
 NOVO_MEDICO = {"nome": "Dra. Nova", "crm": "CRM-SP-9999", "especialidade": "Cardiologia"}
 
 
@@ -26,6 +26,9 @@ def _dados_de_paciente(usuario_id: int, cpf: str = "12345678900") -> dict[str, o
 @pytest.mark.parametrize(
     ("solicitante", "papel_novo", "status"),
     [
+        (GESTOR, MEDICO, 201),
+        (GESTOR, ADMIN, 201),
+        (GESTOR, PACIENTE, 403),
         (ADMIN, PACIENTE, 201),
         (ADMIN, ADMIN, 201),
         (ADMIN, MEDICO, 403),
@@ -52,14 +55,31 @@ def test_cadastro_de_usuarios_segue_a_matriz_de_permissoes(
         assert "token" not in resposta.json()
 
 
-@pytest.mark.parametrize(("solicitante", "status"), [(MEDICO, 201), (ADMIN, 403), (PACIENTE, 403), (None, 401)])
-def test_somente_medico_cadastra_medico(api: ClinicaApi, solicitante: PapelUsuario | None, status: int) -> None:
+@pytest.mark.parametrize("solicitante", list(PapelUsuario))
+def test_ninguem_cadastra_usuario_com_o_papel_de_gestor(api: ClinicaApi, solicitante: PapelUsuario) -> None:
+    resposta = api.client.post(
+        "/api/auth/register",
+        headers=_logado_como(api, solicitante),
+        json={"nome": "Outro Gestor", "email": "outro.gestor@email.com", "senha": SENHA_PADRAO, "papel": GESTOR},
+    )
+
+    assert resposta.status_code == 403, resposta.text
+
+
+@pytest.mark.parametrize(
+    ("solicitante", "status"), [(MEDICO, 201), (GESTOR, 201), (ADMIN, 403), (PACIENTE, 403), (None, 401)]
+)
+def test_somente_medico_e_gestor_cadastram_medico(
+    api: ClinicaApi, solicitante: PapelUsuario | None, status: int
+) -> None:
     resposta = api.client.post("/api/medicos", headers=_logado_como(api, solicitante), json=NOVO_MEDICO)
 
     assert resposta.status_code == status, resposta.text
 
 
-@pytest.mark.parametrize(("solicitante", "status"), [(ADMIN, 201), (MEDICO, 201), (PACIENTE, 403), (None, 401)])
+@pytest.mark.parametrize(
+    ("solicitante", "status"), [(ADMIN, 201), (MEDICO, 201), (GESTOR, 403), (PACIENTE, 403), (None, 401)]
+)
 def test_atendente_e_medico_cadastram_paciente(api: ClinicaApi, solicitante: PapelUsuario | None, status: int) -> None:
     usuario = api.cadastrar_usuario("Paciente Novo", "paciente.novo@email.com")
 
@@ -91,6 +111,7 @@ def test_lista_de_pacientes_com_dados_pessoais_e_restrita_a_funcionarios(api: Cl
 
     assert api.client.get("/api/pacientes").status_code == 401
     assert api.client.get("/api/pacientes", headers=headers_paciente).status_code == 403
+    assert api.client.get("/api/pacientes", headers=_logado_como(api, GESTOR)).status_code == 403
     assert api.client.get("/api/pacientes", headers=api.admin).status_code == 200
 
 

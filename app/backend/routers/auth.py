@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, status
 from sqlalchemy.orm import Session
 
 from app.backend.core.database import get_db
-from app.backend.core.dependencies import get_current_user, require_admin_or_medico
+from app.backend.core.dependencies import get_current_user
 from app.backend.models import Usuario
 from app.backend.schemas.usuario import SessaoOut, UsuarioCreate, UsuarioLogin, UsuarioOut
 from app.backend.services.auth_service import AuthService
@@ -13,7 +13,7 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 @router.post("/register", response_model=UsuarioOut, status_code=status.HTTP_201_CREATED)
 def register(
     payload: UsuarioCreate,
-    solicitante: Usuario = Depends(require_admin_or_medico),
+    solicitante: Usuario = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> UsuarioOut:
     return AuthService(db).register(payload, solicitante)
