@@ -39,10 +39,10 @@ assistente-clinico/
 
 Pipeline do assistente (`POST /api/assistant/chat`):
 
-1. **spaCy** extrai intenção (Matcher) e entidades (EntityRuler): especialidade, médico, data, período, hora e turno.
+1. **spaCy** extrai intenção (Matcher) e entidades (EntityRuler): especialidade, médico, data, período, hora e turno. Quando o paciente descreve um sintoma ou usa um termo popular ("dor nas costas", "consulta do coração"), a especialidade é inferida pelo dicionário `SINTOMAS_E_TERMOS_COLOQUIAIS`.
 2. **Heurísticas de Nielsen** transformam a mensagem em um vetor numérico (taxa de erros, complexidade, hesitação, vagueza e informalidade).
-3. **Random Forest** prevê o perfil etário (`IDOSO` ou `PADRAO`), suavizado ao longo da conversa.
-4. **Gerenciador de diálogo** agenda, sugere horários, lista ou cancela (cancelamento exige confirmação).
+3. **Random Forest** prevê o perfil etário (`IDOSO` ou `PADRAO`), suavizado ao longo da conversa. A conversa começa no estilo simplificado e só muda quando há evidência suficiente, porque mensagens curtas pesam pouco.
+4. **Gerenciador de diálogo** agenda, sugere horários, lista ou cancela (cancelamento exige confirmação). A especialidade é perguntada no máximo uma vez: se o paciente não souber ("não sei", "qualquer um"), o agendamento segue com Clínica Geral.
 5. **Árvore de decisão** escolhe o estilo da resposta: linguagem simplificada, sem termos técnicos e com passos numerados para `IDOSO`.
 
 ## Instalação
@@ -57,7 +57,7 @@ pip install -r app/backend/requirements.txt -r app/frontend/requirements.txt
 
 Copie `app/backend/.env.example` para `app/backend/.env` e ajuste as variáveis (o arquivo é lido independentemente do diretório de execução).
 
-O front-end lê variáveis de ambiente opcionais: `FASTAPI_BASE_URL` (padrão `http://localhost:8000/api`), `DJANGO_SECRET_KEY`, `DJANGO_DEBUG` e `DJANGO_ALLOWED_HOSTS`.
+O front-end lê variáveis de ambiente opcionais: `FASTAPI_BASE_URL` (padrão `http://127.0.0.1:8000/api`), `DJANGO_SECRET_KEY`, `DJANGO_DEBUG` e `DJANGO_ALLOWED_HOSTS`.
 
 > **Banco já existente:** a regra "uma consulta ativa por horário" passou a ser um índice único parcial. Em um PostgreSQL criado por versões anteriores, execute:
 >
@@ -72,7 +72,7 @@ Na raiz do projeto:
 
 ```bash
 python -m app.backend.seed                      # dados de demonstração (idempotente)
-uvicorn app.backend.main:app --reload           # API em http://localhost:8000 (docs em /docs)
+uvicorn app.backend.main:app --reload           # API em http://127.0.0.1:8000 (docs em /docs)
 ```
 
 Em outro terminal:
