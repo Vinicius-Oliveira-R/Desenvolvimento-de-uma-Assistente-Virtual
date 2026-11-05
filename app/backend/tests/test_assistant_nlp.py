@@ -3,6 +3,7 @@ from zoneinfo import ZoneInfo
 
 import pytest
 
+from app.backend.assistant.especialidades import SINTOMAS_E_TERMOS_COLOQUIAIS, buscar_especialidade
 from app.backend.assistant.nlp import Intencao, MessageInterpreter, get_language_processor
 from app.backend.assistant.temporal import IntervaloDatas, TemporalResolver
 from app.backend.core.clock import FixedClock
@@ -66,6 +67,48 @@ def test_reconhece_termos_leigos_e_tecnicos_de_especialidade(
     interpretador: MessageInterpreter, texto: str, especialidade: str
 ) -> None:
     assert interpretador.interpret(texto).entidades.especialidade == especialidade
+
+
+@pytest.mark.parametrize(
+    ("texto", "especialidade"),
+    [
+        ("quero marcar uma consulta do coração", "Cardiologia"),
+        ("quero marcar uma consulta para ver minha dor nas costas", "Ortopedia"),
+        ("tô com uma coceira que não passa", "Dermatologia"),
+        ("não estou enxergando direito", "Oftalmologia"),
+        ("preciso cuidar da minha diabetes", "Endocrinologia"),
+        ("quero um médico geral", "Clínica Geral"),
+        ("fazer um check-up", "Clínica Geral"),
+    ],
+)
+def test_infere_especialidade_por_sintomas_e_termos_coloquiais(
+    interpretador: MessageInterpreter, texto: str, especialidade: str
+) -> None:
+    mensagem = interpretador.interpret(texto)
+
+    assert mensagem.entidades.especialidade == especialidade
+    assert mensagem.intencao == Intencao.AGENDAR
+
+
+def test_especialidade_explicita_prevalece_sobre_a_inferida_por_sintoma(interpretador: MessageInterpreter) -> None:
+    entidades = interpretador.interpret("estou com dor de cabeça e quero um cardiologista").entidades
+
+    assert entidades.especialidade == "Cardiologia"
+
+
+def test_dicionario_de_sintomas_aponta_para_especialidades_do_catalogo() -> None:
+    assert all(buscar_especialidade(nome) for nome in SINTOMAS_E_TERMOS_COLOQUIAIS)
+
+
+@pytest.mark.parametrize(
+    "texto", ["não sei", "sei lá", "qualquer um", "tanto faz", "geral", "qualquer médico serve"]
+)
+def test_detecta_quando_o_paciente_nao_tem_preferencia_de_medico(interpretador: MessageInterpreter, texto: str) -> None:
+    assert interpretador.interpret(texto).sem_preferencia
+
+
+def test_qualquer_dia_nao_e_confundido_com_falta_de_preferencia_de_medico(interpretador: MessageInterpreter) -> None:
+    assert not interpretador.interpret("qualquer dia serve").sem_preferencia
 
 
 def test_detecta_confirmacao_negacao_e_pedido_de_outra_opcao(interpretador: MessageInterpreter) -> None:

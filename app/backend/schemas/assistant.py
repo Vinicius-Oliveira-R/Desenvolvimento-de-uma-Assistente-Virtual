@@ -24,8 +24,12 @@ class CriteriosAgendamento(BaseModel):
     hora: str | None = None
     turno: str | None = None
 
+    @property
+    def possui_alvo(self) -> bool:
+        return bool(self.medico_nome or self.especialidade)
+
     def merge(self, novos: "CriteriosAgendamento") -> "CriteriosAgendamento":
-        novo_alvo = bool(novos.medico_nome or novos.especialidade)
+        novo_alvo = novos.possui_alvo
         nova_data = novos.data_inicio is not None
         novo_horario = bool(novos.hora or novos.turno)
         return CriteriosAgendamento(

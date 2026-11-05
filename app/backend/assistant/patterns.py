@@ -1,6 +1,14 @@
 from typing import Any
 
-from app.backend.assistant.especialidades import ARTIGOS, CATALOGO, CONECTIVOS_LEIGOS, PROFISSIONAIS
+from app.backend.assistant.especialidades import (
+    ARTIGOS,
+    CATALOGO,
+    CONECTIVOS_LEIGOS,
+    EXPRESSOES_SEM_PREFERENCIA,
+    PROFISSIONAIS,
+    SINTOMAS_E_TERMOS_COLOQUIAIS,
+)
+from app.backend.core.text import normalizar
 
 Padrao = list[dict[str, Any]]
 
@@ -24,10 +32,11 @@ SINAL_AFIRMACAO_INICIAL = "AFIRMACAO_INICIAL"
 SINAL_NEGACAO = "NEGACAO"
 SINAL_OUTRA_OPCAO = "OUTRA_OPCAO"
 SINAL_MENCAO_CONSULTA = "MENCAO_CONSULTA"
+SINAL_SEM_PREFERENCIA = "SEM_PREFERENCIA"
 
 
 def _termo(texto: str) -> Padrao:
-    return [{"NORM": parte} for parte in texto.split()]
+    return [{"NORM": parte} for parte in normalizar(texto).split()]
 
 
 def _alguma(*palavras: str) -> dict[str, Any]:
@@ -50,6 +59,9 @@ def padroes_entidades() -> list[dict[str, Any]]:
                     _alguma(*especialidade.orgaos),
                 ],
             })
+    for especialidade, termos in SINTOMAS_E_TERMOS_COLOQUIAIS.items():
+        for termo in termos:
+            padroes.append({"label": "ESPECIALIDADE_INFERIDA", "id": especialidade, "pattern": _termo(termo)})
 
     padroes.append({
         "label": "MEDICO",
@@ -133,4 +145,5 @@ PADROES_SINAIS: dict[str, list[Padrao]] = {
         [_alguma("proximo", "proxima"), _alguma("horario", "opcao", "vaga")],
     ],
     SINAL_MENCAO_CONSULTA: [[_alguma("consulta", "medico", "medica", "doutor", "doutora")]],
+    SINAL_SEM_PREFERENCIA: [_termo(expressao) for expressao in EXPRESSOES_SEM_PREFERENCIA],
 }

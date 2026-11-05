@@ -83,6 +83,41 @@ CATALOGO: tuple[Especialidade, ...] = (
     ),
 )
 
+ESPECIALIDADE_PADRAO = "Clínica Geral"
+
+SINTOMAS_E_TERMOS_COLOQUIAIS: dict[str, tuple[str, ...]] = {
+    "Cardiologia": ("coração", "pressão", "palpitação", "batedeira", "colesterol", "arritmia"),
+    "Dermatologia": (
+        "pele", "mancha na pele", "manchas na pele", "coceira", "espinha", "espinhas", "acne", "verruga",
+        "queda de cabelo", "cabelo caindo", "caspa", "micose", "unha",
+    ),
+    "Ortopedia": (
+        "dor nas costas", "dor na costa", "costas", "coluna", "osso", "ossos", "joelho", "joelhos", "ombro",
+        "quadril", "tornozelo", "juntas", "dor na junta", "fratura", "torci", "torção",
+    ),
+    "Neurologia": (
+        "dor de cabeça", "dor na cabeça", "enxaqueca", "memória", "esquecimento", "esquecendo", "formigamento",
+        "tremor", "tremedeira",
+    ),
+    "Pediatria": ("criança", "crianças", "nenê", "neném"),
+    "Ginecologia": ("preventivo", "papanicolau", "menstruação", "gravidez", "grávida", "menopausa"),
+    "Oftalmologia": ("vista", "olho", "olhos", "visão", "enxergar", "enxergando", "óculos", "catarata", "glaucoma"),
+    "Endocrinologia": ("diabetes", "diabete", "açúcar", "glicose", "tireoide", "hormônio", "hormônios"),
+    "Psiquiatria": ("ansiedade", "depressão", "insônia", "pânico"),
+    "Otorrinolaringologia": ("ouvido", "ouvidos", "nariz", "garganta", "zumbido", "sinusite", "rinite", "surdez"),
+    ESPECIALIDADE_PADRAO: (
+        "médico geral", "médica geral", "consulta geral", "médico de família", "médica de família",
+        "check-up", "check up", "checkup", "de rotina", "febre", "gripe", "resfriado", "tontura", "cansaço",
+        "mal-estar", "mal estar", "barriga", "estômago",
+    ),
+}
+
+EXPRESSOES_SEM_PREFERENCIA = (
+    "não sei", "n sei", "nem sei", "sei lá", "não faço ideia", "tanto faz", "geral", "você escolhe", "vc escolhe",
+    "qualquer um", "qualquer uma", "qualquer médico", "qualquer médica", "qualquer doutor", "qualquer doutora",
+    "qualquer especialidade", "qualquer especialista",
+)
+
 _POR_NOME = {normalizar(especialidade.nome): especialidade for especialidade in CATALOGO}
 
 

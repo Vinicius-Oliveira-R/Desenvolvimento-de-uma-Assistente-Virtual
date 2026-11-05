@@ -21,6 +21,9 @@ def get_profile_classifier() -> AgeProfileClassifier:
 
 class ChatOrchestrator:
     PALAVRAS_PARA_EVIDENCIA_PLENA = 8
+    # Sem evidência, a conversa começa no estilo simplificado: falar difícil com um idoso custa mais
+    # do que falar simples com os demais. Mensagens longas logo levam o perfil para o valor previsto.
+    PROBABILIDADE_INICIAL_IDOSO = 1.0
 
     def __init__(
         self,
@@ -71,7 +74,6 @@ class ChatOrchestrator:
         )
 
     def _suavizar(self, atual: float, anterior: float | None, palavras: int) -> float:
-        if anterior is None:
-            return atual
+        base = self.PROBABILIDADE_INICIAL_IDOSO if anterior is None else anterior
         peso = min(1.0, palavras / self.PALAVRAS_PARA_EVIDENCIA_PLENA)
-        return round(peso * atual + (1 - peso) * anterior, 4)
+        return round(peso * atual + (1 - peso) * base, 4)

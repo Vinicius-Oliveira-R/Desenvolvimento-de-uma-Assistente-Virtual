@@ -92,8 +92,9 @@ class SimplifiedStyle(ResponseStyle):
             "Achei mais de um médico com esse nome:\n{medicos}\nEscreva o nome completo do médico."
         ),
         TipoResultado.FALTA_ESPECIALIDADE: (
-            "Vou te ajudar a marcar.\nCom qual médico você quer a consulta?\n"
-            "Exemplos:\n1. Médico do coração.\n2. Médico da pele.\n3. Clínico geral."
+            "Vou te ajudar a marcar.\nQue tipo de médico você precisa?\n"
+            "Pode contar o que está sentindo. Exemplo: \"dor nas costas\".\n"
+            "Se não souber, posso marcar com um clínico geral. Pode ser?"
         ),
         TipoResultado.CONFIRMAR_CANCELAMENTO: (
             "Você quer desmarcar esta consulta?\n{quando}\nMédico: {medico}.\n\n"

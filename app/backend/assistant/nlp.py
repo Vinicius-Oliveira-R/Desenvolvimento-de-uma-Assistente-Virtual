@@ -18,6 +18,7 @@ from app.backend.assistant.patterns import (
     SINAL_MENCAO_CONSULTA,
     SINAL_NEGACAO,
     SINAL_OUTRA_OPCAO,
+    SINAL_SEM_PREFERENCIA,
     TITULOS_MEDICOS,
     padroes_entidades,
 )
@@ -122,6 +123,7 @@ class MensagemInterpretada:
     afirmativa: bool = False
     negativa: bool = False
     pede_outra_opcao: bool = False
+    sem_preferencia: bool = False
 
 
 class MessageInterpreter:
@@ -148,6 +150,7 @@ class MessageInterpreter:
             afirmativa=afirmativa,
             negativa=negativa,
             pede_outra_opcao=SINAL_OUTRA_OPCAO in sinais,
+            sem_preferencia=SINAL_SEM_PREFERENCIA in sinais,
         )
 
     @staticmethod
@@ -167,7 +170,7 @@ class MessageInterpreter:
         return Intencao.DESCONHECIDA
 
     def _extrair_entidades(self, doc: Doc) -> Entidades:
-        turno = next((ent.ent_id_ for ent in doc.ents if ent.label_ == "TURNO"), None)
+        turno = self._primeiro_id(doc, "TURNO")
         valores: dict[str, Any] = {"turno": turno} if turno else {}
         for ent in doc.ents:
             match ent.label_:
@@ -185,7 +188,13 @@ class MessageInterpreter:
                 case "HORA":
                     if hora := self._resolver.hora(ent.text, turno):
                         valores.setdefault("hora", hora)
+        if inferida := self._primeiro_id(doc, "ESPECIALIDADE_INFERIDA"):
+            valores.setdefault("especialidade", inferida)
         return Entidades(**valores)
+
+    @staticmethod
+    def _primeiro_id(doc: Doc, rotulo: str) -> str | None:
+        return next((ent.ent_id_ for ent in doc.ents if ent.label_ == rotulo), None)
 
     def _resolver_data(self, ent: Span) -> date | None:
         if ent.ent_id_ == "explicita":

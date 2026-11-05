@@ -5,7 +5,7 @@ from enum import StrEnum
 
 from sqlalchemy.orm import Session
 
-from app.backend.assistant.especialidades import buscar_especialidade
+from app.backend.assistant.especialidades import ESPECIALIDADE_PADRAO, buscar_especialidade
 from app.backend.assistant.nlp import (
     INTENCOES_DE_RESPOSTA,
     INTENCOES_SOCIAIS,
@@ -116,6 +116,10 @@ def _periodo_de(criterios: CriteriosAgendamento) -> IntervaloDatas | None:
     return IntervaloDatas(criterios.data_inicio, criterios.data_fim or criterios.data_inicio)
 
 
+def _com_especialidade_padrao(criterios: CriteriosAgendamento) -> CriteriosAgendamento:
+    return criterios.model_copy(update={"especialidade": ESPECIALIDADE_PADRAO})
+
+
 class DialogueManager:
     OBSERVACAO_AGENDAMENTO = "Agendamento realizado pelo assistente virtual"
 
@@ -140,6 +144,9 @@ class DialogueManager:
         compativel = mensagem.intencao in (*neutras, INTENCAO_DA_ACAO[pendente.tipo])
         agendando = pendente.tipo == TipoAcao.AGENDAR
 
+        if agendando and not pendente.criterios.possui_alvo:
+            respondeu = compativel and mensagem.intencao not in INTENCOES_SOCIAIS
+            return self._definir_especialidade(mensagem, paciente, pendente.criterios) if respondeu else None
         if agendando and mensagem.pede_outra_opcao and sem_criterios:
             recusados = [*pendente.recusados, *([pendente.horario_id] if pendente.horario_id else [])]
             return self._agendar(paciente, pendente.criterios, recusados)
@@ -153,10 +160,24 @@ class DialogueManager:
             return self._agendar(paciente, pendente.criterios.merge(criterios_de(mensagem.entidades)))
         return None
 
+    def _definir_especialidade(
+        self, mensagem: MensagemInterpretada, paciente: Paciente, pendentes: CriteriosAgendamento
+    ) -> ResultadoDialogo:
+        criterios = pendentes.merge(criterios_de(mensagem.entidades))
+        if criterios.possui_alvo:
+            return self._agendar(paciente, criterios)
+        if mensagem.negativa and not (mensagem.sem_preferencia or mensagem.entidades.possui_criterios):
+            return ResultadoDialogo(TipoResultado.AGENDAMENTO_DESCARTADO)
+        # A especialidade é perguntada uma só vez: dúvida, "sim" ou resposta não reconhecida seguem com o padrão.
+        return self._agendar(paciente, _com_especialidade_padrao(criterios))
+
     def _rotear(self, mensagem: MensagemInterpretada, paciente: Paciente) -> ResultadoDialogo:
         match mensagem.intencao:
             case Intencao.AGENDAR:
-                return self._agendar(paciente, criterios_de(mensagem.entidades))
+                criterios = criterios_de(mensagem.entidades)
+                if mensagem.sem_preferencia and not criterios.possui_alvo:
+                    criterios = _com_especialidade_padrao(criterios)
+                return self._agendar(paciente, criterios)
             case Intencao.CANCELAR:
                 return self._solicitar_cancelamento(paciente, mensagem.entidades)
             case Intencao.REMARCAR:
