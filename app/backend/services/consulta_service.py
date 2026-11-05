@@ -9,6 +9,7 @@ from app.backend.core.exceptions import BusinessRuleError, ConflictError, Horari
 from app.backend.models import Consulta, Horario, Medico, Paciente, StatusConsulta
 from app.backend.repositories.consulta_repository import ConsultaRepository, FiltroAgenda
 from app.backend.repositories.horario_repository import HorarioRepository
+from app.backend.repositories.notificacao_repository import NotificacaoRepository
 from app.backend.repositories.paciente_repository import PacienteRepository
 from app.backend.schemas.consulta import (
     ConfirmacaoConsulta,
@@ -56,7 +57,9 @@ class ConsultaService:
         return ConsultaOut.model_validate(consulta)
 
     def list_agenda(self, filtro: FiltroAgenda) -> list[ConsultaAgendaOut]:
-        return [ConsultaAgendaOut.from_agenda(*linha) for linha in self.repository.list_agenda(filtro)]
+        return self._com_pedidos_pendentes(
+            [ConsultaAgendaOut.from_agenda(*linha) for linha in self.repository.list_agenda(filtro)]
+        )
 
     def list_by_usuario(self, usuario_id: int) -> list[ConsultaDetalhadaOut]:
         paciente = PacienteRepository(self.db).get_by_usuario_id(usuario_id)
@@ -71,7 +74,13 @@ class ConsultaService:
         linha = self.repository.get_da_agenda(consulta_id)
         if linha is None:
             raise NotFoundError("Consulta não encontrada")
-        return ConsultaAgendaOut.from_agenda(*linha)
+        return self._com_pedidos_pendentes([ConsultaAgendaOut.from_agenda(*linha)])[0]
+
+    def _com_pedidos_pendentes(self, consultas: list[ConsultaAgendaOut]) -> list[ConsultaAgendaOut]:
+        pendentes = NotificacaoRepository(self.db).solicitacoes_pendentes_por_consulta([c.id for c in consultas])
+        return [
+            consulta.model_copy(update={"solicitacao_pendente": pendentes.get(consulta.id)}) for consulta in consultas
+        ]
 
     def update(self, consulta_id: int, payload: ConsultaUpdate) -> ConsultaOut:
         with self._transacao():

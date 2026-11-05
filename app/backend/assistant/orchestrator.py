@@ -3,7 +3,12 @@ from functools import lru_cache
 
 from sqlalchemy.orm import Session
 
-from app.backend.assistant.dialogue import DialogueManager, ResultadoDialogo, TipoResultado
+from app.backend.assistant.dialogue import (
+    APRESENTACOES_DE_SOLICITACAO,
+    DialogueManager,
+    ResultadoDialogo,
+    TipoResultado,
+)
 from app.backend.assistant.nlp import LanguageProcessor, MessageInterpreter, get_language_processor
 from app.backend.assistant.responses import ResponseDecisionTree
 from app.backend.assistant.temporal import TemporalResolver
@@ -57,7 +62,9 @@ class ChatOrchestrator:
 
         paciente = self.pacientes.get_by_usuario_id(usuario_id)
         resultado = (
-            self.dialogue.handle(mensagem, paciente, requisicao.contexto.acao_pendente)
+            self.dialogue.handle(
+                mensagem, paciente, requisicao.contexto.acao_pendente, requisicao.contexto.solicitacoes_vistas
+            )
             if paciente
             else ResultadoDialogo(TipoResultado.PACIENTE_NAO_CADASTRADO)
         )
@@ -69,9 +76,19 @@ class ChatOrchestrator:
             resultado=resultado.tipo,
             entidades=mensagem.entidades.as_dict(),
             heuristicas=HeuristicasOut(**asdict(vetor)),
-            contexto=ContextoConversa(acao_pendente=resultado.acao_pendente, probabilidade_idoso=probabilidade),
+            contexto=ContextoConversa(
+                acao_pendente=resultado.acao_pendente,
+                probabilidade_idoso=probabilidade,
+                solicitacoes_vistas=self._vistas(requisicao.contexto.solicitacoes_vistas, resultado),
+            ),
             consulta=resultado.consulta,
         )
+
+    @staticmethod
+    def _vistas(anteriores: list[int], resultado: ResultadoDialogo) -> list[int]:
+        if resultado.tipo in APRESENTACOES_DE_SOLICITACAO and resultado.acao_pendente:
+            return [*anteriores, resultado.acao_pendente.notificacao_id]
+        return anteriores
 
     def _suavizar(self, atual: float, anterior: float | None, palavras: int) -> float:
         base = self.PROBABILIDADE_INICIAL_IDOSO if anterior is None else anterior

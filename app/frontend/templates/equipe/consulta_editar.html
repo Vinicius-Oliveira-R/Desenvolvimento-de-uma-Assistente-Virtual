@@ -32,41 +32,56 @@
             </div>
         </div>
 
+        {% if consulta.solicitacao_pendente %}
+            <div class="alert alert-info" role="status">
+                <i class="bi bi-hourglass-split me-2"></i>
+                Aguardando o paciente responder ao pedido de
+                {% if consulta.solicitacao_pendente == 'reagendamento_pendente' %}remarcação{% else %}cancelamento{% endif %}.
+            </div>
+        {% endif %}
+
         {% if consulta.status == 'cancelada' %}
             <div class="alert alert-secondary" role="alert">
                 Esta consulta foi cancelada e o horário já está livre. Para atender o paciente, agende uma nova consulta.
             </div>
         {% else %}
-            <form method="post" novalidate class="card border-secondary p-4 mb-4">
+            {% if consulta.ativa %}
+                <form method="post" novalidate class="card border-secondary p-4 mb-4">
+                    {% csrf_token %}
+                    <h6 class="mb-1">Remarcar</h6>
+                    <p class="text-secondary small mb-3">Por padrão, o paciente recebe o pedido e a consulta só muda quando ele aceitar.</p>
+                    {% for erro_geral in form.non_field_errors %}
+                        <div class="alert alert-danger" role="alert">{{ erro_geral }}</div>
+                    {% endfor %}
+                    <div class="row">
+                        <div class="col-md-7">{{ form.medico_id|as_crispy_field }}</div>
+                        <div class="col-md-5">{{ form.data|as_crispy_field }}</div>
+                    </div>
+                    {{ form.horario_id|as_crispy_field }}
+                    {{ form.motivo|as_crispy_field }}
+                    {{ form.aplicar_agora|as_crispy_field }}
+                    <button type="submit" class="btn btn-accent"><i class="bi bi-arrow-repeat me-2"></i>Continuar</button>
+                </form>
+            {% endif %}
+
+            <form method="post" action="{% url 'situacao_consulta' consulta.id %}" novalidate class="card border-secondary p-4 mb-4">
                 {% csrf_token %}
-                <h6 class="mb-3">Remarcar ou atualizar</h6>
-                {% for erro_geral in form.non_field_errors %}
-                    <div class="alert alert-danger" role="alert">{{ erro_geral }}</div>
-                {% endfor %}
+                <h6 class="mb-3">Situação e observação</h6>
                 <div class="row">
-                    <div class="col-md-7">{{ form.medico_id|as_crispy_field }}</div>
-                    <div class="col-md-5">{{ form.data|as_crispy_field }}</div>
+                    <div class="col-md-4">{{ situacao.status|as_crispy_field }}</div>
+                    <div class="col-md-8">{{ situacao.observacao|as_crispy_field }}</div>
                 </div>
-                {{ form.horario_id|as_crispy_field }}
-                <div class="row">
-                    <div class="col-md-4">{{ form.status|as_crispy_field }}</div>
-                    <div class="col-md-8">{{ form.observacao|as_crispy_field }}</div>
-                </div>
-                {{ form.confirmado|as_crispy_field }}
-                <button type="submit" class="btn btn-accent">
-                    <i class="bi bi-check2-circle me-2"></i>Salvar alterações
-                </button>
+                <button type="submit" class="btn btn-outline-secondary"><i class="bi bi-check2 me-2"></i>Salvar</button>
             </form>
 
             {% if consulta.ativa %}
                 <form method="post" action="{% url 'cancelar_consulta' consulta.id %}" novalidate class="card border-danger p-4">
                     {% csrf_token %}
-                    <h6 class="mb-3 text-danger">Cancelar consulta</h6>
-                    <p class="text-secondary mb-2">O horário volta a ficar livre para outros pacientes.</p>
-                    {{ cancelamento.confirmado|as_crispy_field }}
-                    <button type="submit" class="btn btn-outline-danger">
-                        <i class="bi bi-x-circle me-2"></i>Cancelar consulta
-                    </button>
+                    <h6 class="mb-1 text-danger">Cancelar consulta</h6>
+                    <p class="text-secondary small mb-3">Por padrão, o paciente recebe o pedido e o horário só é liberado quando ele aceitar.</p>
+                    {{ cancelamento.motivo|as_crispy_field }}
+                    {{ cancelamento.aplicar_agora|as_crispy_field }}
+                    <button type="submit" class="btn btn-outline-danger"><i class="bi bi-x-circle me-2"></i>Continuar</button>
                 </form>
             {% endif %}
         {% endif %}

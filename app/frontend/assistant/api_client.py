@@ -141,6 +141,7 @@ class ConsultaAgendada:
     especialidade: str
     paciente_nome: str
     observacao: str | None
+    solicitacao_pendente: str | None = None
 
     @classmethod
     def from_json(cls, dados: dict[str, Any]) -> "ConsultaAgendada":
@@ -155,11 +156,23 @@ class ConsultaAgendada:
             especialidade=dados["especialidade"],
             paciente_nome=dados["paciente_nome"],
             observacao=dados.get("observacao"),
+            solicitacao_pendente=dados.get("solicitacao_pendente"),
         )
 
     @property
     def ativa(self) -> bool:
         return self.status == "agendada"
+
+
+@dataclass(frozen=True)
+class Notificacao:
+    id: int
+    mensagem: str
+    acao_necessaria: bool
+
+    @classmethod
+    def from_json(cls, dados: dict[str, Any]) -> "Notificacao":
+        return cls(dados["id"], dados["mensagem"], dados["acao_necessaria"])
 
 
 class ClinicaApiClient:
@@ -230,6 +243,16 @@ class ClinicaApiClient:
 
     async def release_slots(self, token: str, dados: dict[str, Any]) -> dict[str, int]:
         return await self._requisitar("POST", "/horarios/lote", token, json=dados)
+
+    async def list_notifications(self, token: str) -> list[Notificacao]:
+        return [Notificacao.from_json(item) for item in await self._requisitar("GET", "/notificacoes", token)]
+
+    async def respond_notification(self, token: str, notificacao_id: int, aceitar: bool) -> dict[str, Any]:
+        caminho = f"/notificacoes/{notificacao_id}/responder"
+        return await self._requisitar("POST", caminho, token, json={"aceitar": aceitar})
+
+    async def request_change(self, token: str, consulta_id: int, pedido: dict[str, Any]) -> dict[str, Any]:
+        return await self._requisitar("POST", f"/consultas/{consulta_id}/solicitacoes", token, json=pedido)
 
     async def _requisitar(self, metodo: str, caminho: str, token: str, **opcoes: Any) -> Any:
         try:

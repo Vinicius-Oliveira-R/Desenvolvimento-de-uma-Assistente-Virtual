@@ -14,6 +14,7 @@ class AssistantInterpretRequest(BaseModel):
 class TipoAcao(StrEnum):
     AGENDAR = "agendar"
     CANCELAR = "cancelar"
+    RESPONDER_SOLICITACAO = "responder_solicitacao"
 
 
 class CriteriosAgendamento(BaseModel):
@@ -49,6 +50,7 @@ class AcaoPendente(BaseModel):
     tipo: TipoAcao
     horario_id: int | None = None
     consulta_id: int | None = None
+    notificacao_id: int | None = None
     criterios: CriteriosAgendamento = Field(default_factory=CriteriosAgendamento)
     recusados: list[int] = Field(default_factory=list)
 
@@ -56,6 +58,7 @@ class AcaoPendente(BaseModel):
 class ContextoConversa(BaseModel):
     acao_pendente: AcaoPendente | None = None
     probabilidade_idoso: float | None = Field(default=None, ge=0, le=1)
+    solicitacoes_vistas: list[int] = Field(default_factory=list)
 
 
 class ChatRequest(BaseModel):

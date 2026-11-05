@@ -13,6 +13,7 @@ from app.backend.routers.auth import router as auth_router
 from app.backend.routers.consultas import router as consultas_router
 from app.backend.routers.horarios import router as horarios_router
 from app.backend.routers.medicos import router as medicos_router
+from app.backend.routers.notificacoes import router as notificacoes_router
 from app.backend.routers.pacientes import router as pacientes_router
 
 settings = get_settings()
@@ -40,7 +41,16 @@ async def handle_domain_error(_: Request, exc: DomainError) -> JSONResponse:
     return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
 
 
-for router in (auth_router, pacientes_router, medicos_router, horarios_router, consultas_router, assistant_router):
+ROUTERS = (
+    auth_router,
+    pacientes_router,
+    medicos_router,
+    horarios_router,
+    consultas_router,
+    notificacoes_router,
+    assistant_router,
+)
+for router in ROUTERS:
     app.include_router(router, prefix=settings.api_prefix)
 
 

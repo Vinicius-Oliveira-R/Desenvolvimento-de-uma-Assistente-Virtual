@@ -41,6 +41,9 @@ class ResponseStyle(ABC):
             "medicos": self.describe_doctors(resultado.medicos),
             "periodo": self.describe_period(resultado.periodo),
             "detalhe": resultado.detalhe or "",
+            "solicitante": resultado.detalhe or "A clínica",
+            "quando_novo": self.describe_when(resultado.opcao_nova) if resultado.opcao_nova else "",
+            "medico_novo": resultado.opcao_nova.medico if resultado.opcao_nova else "",
         }
         return self.modelos[resultado.tipo].format(**campos).strip()
 
@@ -138,6 +141,23 @@ class SimplifiedStyle(ResponseStyle):
         ),
         TipoResultado.PACIENTE_NAO_CADASTRADO: (
             "Não achei seu cadastro de paciente.\nPor favor, fale com a recepção da clínica."
+        ),
+        TipoResultado.SOLICITACAO_REMARCACAO: (
+            "Antes de continuar, preciso de uma resposta sua.\n{solicitante} pediu para mudar sua consulta.\n"
+            "Como está agora:\n{quando}\nComo ficaria:\n{quando_novo}\nMédico: {medico_novo}.\n\n"
+            "1. Para aceitar, escreva SIM.\n2. Para deixar como está, escreva NÃO."
+        ),
+        TipoResultado.SOLICITACAO_CANCELAMENTO: (
+            "Antes de continuar, preciso de uma resposta sua.\n{solicitante} pediu para desmarcar sua consulta.\n"
+            "{quando}\nMédico: {medico}.\n\n"
+            "1. Para aceitar, escreva SIM.\n2. Para manter a consulta, escreva NÃO."
+        ),
+        TipoResultado.REMARCACAO_ACEITA: (
+            "Pronto! Sua consulta mudou de data.\nPara ver, toque em \"Meus Agendamentos\"."
+        ),
+        TipoResultado.CANCELAMENTO_ACEITO: "Pronto! Sua consulta foi desmarcada.\nO horário ficou livre.",
+        TipoResultado.SOLICITACAO_RECUSADA: (
+            "Tudo bem. Sua consulta continua como estava.\nA clínica vai ser avisada."
         ),
     }
 
@@ -240,6 +260,19 @@ class StandardStyle(ResponseStyle):
         ),
         TipoResultado.PACIENTE_NAO_CADASTRADO: (
             "Não há cadastro de paciente vinculado ao seu usuário. Procure a recepção para concluir o cadastro."
+        ),
+        TipoResultado.SOLICITACAO_REMARCACAO: (
+            "{solicitante} solicitou remarcar sua consulta com {medico} de {quando} para {quando_novo} "
+            "com {medico_novo}. Responda \"sim\" para aceitar ou \"não\" para manter o horário atual."
+        ),
+        TipoResultado.SOLICITACAO_CANCELAMENTO: (
+            "{solicitante} solicitou cancelar sua consulta com {medico} em {quando}. "
+            "Responda \"sim\" para aceitar ou \"não\" para mantê-la."
+        ),
+        TipoResultado.REMARCACAO_ACEITA: "Remarcação confirmada. A nova data já aparece em \"Meus Agendamentos\".",
+        TipoResultado.CANCELAMENTO_ACEITO: "Cancelamento confirmado. O horário foi liberado.",
+        TipoResultado.SOLICITACAO_RECUSADA: (
+            "Solicitação recusada. Sua consulta foi mantida e a clínica será avisada."
         ),
     }
 

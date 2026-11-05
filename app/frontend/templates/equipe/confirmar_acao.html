@@ -1,0 +1,20 @@
+{% extends 'base.html' %}
+
+{% block title %}Confirmar - Assistente Clínico{% endblock %}
+
+{% block content %}
+<div class="container py-4 calendario" style="max-width: 760px;">
+    <h3 class="mb-4"><i class="bi bi-exclamation-circle me-2"></i> Tem certeza?</h3>
+    <div class="card border-warning p-4">
+        <p class="fs-5 mb-2">{{ resumo }}</p>
+        <p class="text-secondary mb-4">{{ aviso }}</p>
+        <form method="post" action="{{ acao }}" class="d-flex gap-2">
+            {% csrf_token %}
+            {% for nome, valor in campos %}<input type="hidden" name="{{ nome }}" value="{{ valor }}">{% endfor %}
+            <input type="hidden" name="confirmar" value="1">
+            <button type="submit" class="btn btn-accent"><i class="bi bi-check2-circle me-2"></i>Confirmar</button>
+            <a href="{% url 'editar_consulta' consulta.id %}" class="btn btn-outline-secondary">Desistir</a>
+        </form>
+    </div>
+</div>
+{% endblock %}

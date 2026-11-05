@@ -39,7 +39,7 @@
                                 <tr>
                                     <td>{{ consulta.hora_inicio }} – {{ consulta.hora_fim }}</td>
                                     <td>{{ consulta.paciente_nome }}</td>
-                                    <td>{% include 'equipe/partials/situacao.html' with status=consulta.status %}</td>
+                                    <td>{% include 'equipe/partials/situacao.html' with status=consulta.status %}{% if consulta.solicitacao_pendente %} <span class="badge text-bg-warning">Aguardando paciente</span>{% endif %}</td>
                                     <td class="text-secondary">{{ consulta.observacao|default:"" }}</td>
                                     <td class="text-end">
                                         <a href="{% url 'editar_consulta' consulta.id %}" class="btn btn-sm btn-outline-secondary">

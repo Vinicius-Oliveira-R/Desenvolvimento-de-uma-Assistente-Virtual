@@ -410,61 +410,11 @@ class GestaoDeConsultasTests(ApiFalsaMixin, TestCase):
 
         self.assertContains(resposta, "Este horário acabou de ser reservado por outro paciente.")
 
-    def test_remarcacao_exige_confirmacao_do_paciente(self) -> None:
-        requisicoes = self.usar_agenda()
 
-        resposta = self.client.post(
-            reverse("editar_consulta", args=[5]),
-            {"medico_id": "3", "data": "2026-11-10", "horario_id": "8", "status": "agendada"},
-        )
 
-        self.assertContains(resposta, "Este campo é obrigatório.")
-        self.assertFalse(any(r.method == "PUT" for r in requisicoes))
 
-    def test_remarcacao_confirmada_envia_o_novo_horario(self) -> None:
-        requisicoes = self.usar_agenda({"PUT /api/consultas/5": (200, {"id": 5})})
 
-        resposta = self.client.post(
-            reverse("editar_consulta", args=[5]),
-            {"medico_id": "3", "data": "2026-11-10", "horario_id": "8", "status": "agendada", "confirmado": "on"},
-        )
 
-        self.assertRedirects(resposta, reverse("consultas"), fetch_redirect_response=False)
-        self.assertEqual(
-            self._corpo(requisicoes, "PUT", "/api/consultas/5"),
-            {"status": "agendada", "observacao": "", "confirmado": True, "horario_id": 8},
-        )
-
-    def test_mudar_a_data_sem_escolher_horario_e_barrado(self) -> None:
-        requisicoes = self.usar_agenda()
-
-        resposta = self.client.post(
-            reverse("editar_consulta", args=[5]),
-            {"medico_id": "3", "data": "2026-11-12", "horario_id": "", "status": "agendada", "confirmado": "on"},
-        )
-
-        self.assertContains(resposta, "Para mudar o médico ou a data, escolha um novo horário.")
-        self.assertFalse(any(r.method == "PUT" for r in requisicoes))
-
-    def test_cancelamento_confirmado_libera_o_horario_pela_api(self) -> None:
-        requisicoes = self.usar_agenda({"DELETE /api/consultas/5": (200, {"id": 5, "status": "cancelada"})})
-
-        resposta = self.client.post(
-            reverse("cancelar_consulta", args=[5]), {"cancelamento-confirmado": "on"}, follow=True
-        )
-
-        self.assertRedirects(resposta, reverse("consultas"))
-        self.assertContains(resposta, "Consulta cancelada. O horário foi liberado.")
-        self.assertEqual(self._corpo(requisicoes, "DELETE", "/api/consultas/5"), {"confirmado": True})
-
-    def test_cancelamento_sem_confirmacao_nao_chama_a_api(self) -> None:
-        requisicoes = self.usar_agenda()
-
-        resposta = self.client.post(reverse("cancelar_consulta", args=[5]), {}, follow=True)
-
-        self.assertRedirects(resposta, reverse("editar_consulta", args=[5]))
-        self.assertContains(resposta, "Marque a confirmação do paciente para cancelar a consulta.")
-        self.assertFalse(any(r.method == "DELETE" for r in requisicoes))
 
 
 class PainelPorPapelTests(ApiFalsaMixin, TestCase):
@@ -548,3 +498,166 @@ class PainelPorPapelTests(ApiFalsaMixin, TestCase):
 
         self.assertContains(resposta, "Escolha hoje ou uma data futura.")
         self.assertFalse(any(r.url.path == "/api/horarios/lote" for r in requisicoes))
+
+
+REMARCACAO = {"medico_id": "3", "data": "2026-11-10", "horario_id": "8", "motivo": "Médico em congresso"}
+
+
+class FluxoDeConfirmacaoTests(ApiFalsaMixin, TestCase):
+    def usar_agenda(self, extras: dict[str, tuple[int, object]] | None = None) -> list[httpx.Request]:
+        self.autenticar(papel="admin")
+        return self.usar_api(_api_da_equipe({**API_DA_AGENDA, **(extras or {})}))
+
+    @staticmethod
+    def _enviados(requisicoes: list[httpx.Request], metodo: str, caminho: str) -> list[dict]:
+        return [json.loads(r.content) for r in requisicoes if r.method == metodo and r.url.path == caminho]
+
+    def test_remarcacao_pede_confirmacao_de_quem_solicita_antes_de_enviar(self) -> None:
+        requisicoes = self.usar_agenda()
+
+        resposta = self.client.post(reverse("editar_consulta", args=[5]), REMARCACAO)
+
+        self.assertContains(resposta, "Tem certeza?")
+        self.assertContains(resposta, "Pedir ao paciente para remarcar a consulta de Lurdes Andrade")
+        self.assertContains(resposta, "10/11/2026 às 10:00 com Dr. João Mendes")
+        self.assertContains(resposta, 'name="confirmar" value="1"')
+        self.assertFalse([r for r in requisicoes if r.method != "GET"])
+
+    def test_remarcacao_confirmada_vira_pedido_ao_paciente(self) -> None:
+        requisicoes = self.usar_agenda({"POST /api/consultas/5/solicitacoes": (201, {"id": 1})})
+
+        resposta = self.client.post(reverse("editar_consulta", args=[5]), {**REMARCACAO, "confirmar": "1"}, follow=True)
+
+        self.assertContains(resposta, "Pedido de remarcação enviado ao paciente.")
+        self.assertEqual(
+            self._enviados(requisicoes, "POST", "/api/consultas/5/solicitacoes"),
+            [{"tipo": "reagendamento", "horario_id": 8, "motivo": "Médico em congresso"}],
+        )
+        self.assertEqual(self._enviados(requisicoes, "PUT", "/api/consultas/5"), [])
+
+    def test_paciente_que_ja_confirmou_permite_remarcar_na_hora(self) -> None:
+        requisicoes = self.usar_agenda({"PUT /api/consultas/5": (200, {"id": 5})})
+
+        self.client.post(
+            reverse("editar_consulta", args=[5]), {**REMARCACAO, "aplicar_agora": "on", "confirmar": "1"}
+        )
+
+        enviados = self._enviados(requisicoes, "PUT", "/api/consultas/5")
+        self.assertEqual(enviados, [{"horario_id": 8, "confirmado": True}])
+
+    def test_remarcar_sem_escolher_o_novo_horario_e_barrado(self) -> None:
+        requisicoes = self.usar_agenda()
+
+        resposta = self.client.post(reverse("editar_consulta", args=[5]), {**REMARCACAO, "horario_id": ""})
+
+        self.assertContains(resposta, "Este campo é obrigatório.")
+        self.assertNotContains(resposta, "Tem certeza?")
+        self.assertFalse([r for r in requisicoes if r.method != "GET"])
+
+    def test_cancelamento_confirma_e_depois_envia_o_pedido(self) -> None:
+        requisicoes = self.usar_agenda({"POST /api/consultas/5/solicitacoes": (201, {"id": 2})})
+
+        confirmacao = self.client.post(reverse("cancelar_consulta", args=[5]), {"cancelamento-motivo": ""})
+        self.assertContains(confirmacao, "Pedir ao paciente para cancelar a consulta de Lurdes Andrade")
+
+        resposta = self.client.post(
+            reverse("cancelar_consulta", args=[5]), {"cancelamento-motivo": "", "confirmar": "1"}, follow=True
+        )
+
+        self.assertContains(resposta, "Pedido de cancelamento enviado ao paciente.")
+        self.assertEqual(
+            self._enviados(requisicoes, "POST", "/api/consultas/5/solicitacoes"),
+            [{"tipo": "cancelamento", "motivo": None}],
+        )
+
+    def test_cancelamento_imediato_usa_a_rota_direta(self) -> None:
+        requisicoes = self.usar_agenda({"DELETE /api/consultas/5": (200, {"id": 5, "status": "cancelada"})})
+
+        resposta = self.client.post(
+            reverse("cancelar_consulta", args=[5]), {"cancelamento-aplicar_agora": "on", "confirmar": "1"}, follow=True
+        )
+
+        self.assertContains(resposta, "Consulta cancelada. O horário foi liberado e o paciente foi avisado.")
+        self.assertEqual(self._enviados(requisicoes, "DELETE", "/api/consultas/5"), [{"confirmado": True}])
+
+    def test_situacao_e_observacao_sao_salvas_sem_pedido_ao_paciente(self) -> None:
+        requisicoes = self.usar_agenda({"PUT /api/consultas/5": (200, {"id": 5})})
+
+        self.client.post(
+            reverse("situacao_consulta", args=[5]),
+            {"situacao-status": "realizada", "situacao-observacao": "Retorno em 30 dias"},
+        )
+
+        self.assertEqual(
+            self._enviados(requisicoes, "PUT", "/api/consultas/5"),
+            [{"status": "realizada", "observacao": "Retorno em 30 dias", "confirmado": True}],
+        )
+
+    def test_agenda_sinaliza_consulta_aguardando_o_paciente(self) -> None:
+        pendente = {**CONSULTA, "solicitacao_pendente": "reagendamento_pendente"}
+        self.usar_agenda({"GET /api/consultas": (200, [pendente]), "GET /api/consultas/5": (200, pendente)})
+
+        self.assertContains(self.client.get(reverse("consultas")), "Aguardando paciente")
+        self.assertContains(
+            self.client.get(reverse("editar_consulta", args=[5])), "Aguardando o paciente responder ao pedido de"
+        )
+
+
+PEDIDO = {"id": 11, "consulta_id": 5, "tipo": "reagendamento_pendente", "status": "pendente", "criado_em": "x",
+          "mensagem": "Recepção pediu para remarcar sua consulta com Dr. João Mendes.", "acao_necessaria": True}
+AVISO = {"id": 12, "consulta_id": 5, "tipo": "aviso", "status": "pendente", "criado_em": "x",
+         "mensagem": "Lurdes Andrade cancelou pelo assistente a consulta.", "acao_necessaria": False}
+
+
+class NotificacoesTests(ApiFalsaMixin, TestCase):
+    def test_modal_lista_pedidos_com_aceitar_e_recusar_e_avisos_com_ciente(self) -> None:
+        self.autenticar()
+        self.usar_api(_api_da_equipe({"GET /api/notificacoes": (200, [PEDIDO, AVISO])}))
+
+        resposta = self.client.get(reverse("notificacoes_pendentes"), **HTMX)
+
+        self.assertContains(resposta, "Recepção pediu para remarcar sua consulta")
+        self.assertContains(resposta, "Aceitar")
+        self.assertContains(resposta, "Recusar", count=1)
+        self.assertContains(resposta, "Ciente")
+        self.assertContains(resposta, reverse("responder_notificacao", args=[11]))
+
+    def test_resposta_vai_para_a_api_e_o_contador_e_avisado(self) -> None:
+        self.autenticar()
+        requisicoes = self.usar_api(
+            _api_da_equipe({"POST /api/notificacoes/11/responder": (200, {}), "GET /api/notificacoes": (200, [])})
+        )
+
+        resposta = self.client.post(reverse("responder_notificacao", args=[11]), {"aceitar": "nao"}, **HTMX)
+
+        self.assertContains(resposta, "Pedido recusado.")
+        self.assertEqual(resposta["HX-Trigger"], "notificacoes-atualizadas")
+        enviado = next(r for r in requisicoes if r.method == "POST")
+        self.assertEqual(json.loads(enviado.content), {"aceitar": False})
+
+    def test_recusa_da_api_aparece_no_modal(self) -> None:
+        self.autenticar()
+        conflito = (409, {"detail": "O novo horário escolhido não está disponível"})
+        rotas = {"POST /api/notificacoes/11/responder": conflito, "GET /api/notificacoes": (200, [PEDIDO])}
+        self.usar_api(_api_da_equipe(rotas))
+
+        resposta = self.client.post(reverse("responder_notificacao", args=[11]), {"aceitar": "sim"}, **HTMX)
+
+        self.assertContains(resposta, "O novo horário escolhido não está disponível")
+
+    def test_contador_mostra_quantas_notificacoes_estao_pendentes(self) -> None:
+        self.autenticar(papel="medico")
+        self.usar_api(_api_da_equipe({"GET /api/notificacoes": (200, [PEDIDO, AVISO])}))
+
+        resposta = self.client.get(reverse("notificacoes_contagem"), **HTMX)
+
+        self.assertContains(resposta, ">2</span>")
+
+    def test_barra_lateral_tem_o_sino_de_notificacoes(self) -> None:
+        self.autenticar()
+
+        resposta = self.client.get(reverse("chat"))
+
+        self.assertContains(resposta, reverse("notificacoes_pendentes"))
+        self.assertContains(resposta, 'id="modal-notificacoes"')
+

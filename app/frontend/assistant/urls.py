@@ -5,13 +5,17 @@ from .views import (
     CancelarConsultaView,
     ChatView,
     ConsultasView,
+    ContagemNotificacoesView,
     DashboardRedirectView,
     EditarConsultaView,
     EquipeView,
     AgendaMedicaView,
     HorariosLivresView,
     LiberarHorariosView,
+    NotificacoesView,
     NovaConsultaView,
+    ResponderNotificacaoView,
+    SituacaoConsultaView,
 )
 
 urlpatterns = [
@@ -25,6 +29,14 @@ urlpatterns = [
     path('gestao/consultas/nova/', NovaConsultaView.as_view(), name='nova_consulta'),
     path('gestao/consultas/<int:consulta_id>/', EditarConsultaView.as_view(), name='editar_consulta'),
     path('gestao/consultas/<int:consulta_id>/cancelar/', CancelarConsultaView.as_view(), name='cancelar_consulta'),
+    path('gestao/consultas/<int:consulta_id>/situacao/', SituacaoConsultaView.as_view(), name='situacao_consulta'),
+    path('notificacoes/', NotificacoesView.as_view(), name='notificacoes_pendentes'),
+    path('notificacoes/contagem/', ContagemNotificacoesView.as_view(), name='notificacoes_contagem'),
+    path(
+        'notificacoes/<int:notificacao_id>/responder/',
+        ResponderNotificacaoView.as_view(),
+        name='responder_notificacao',
+    ),
     path('gestao/horarios/', LiberarHorariosView.as_view(), name='liberar_horarios'),
     path('gestao/horarios-livres/', HorariosLivresView.as_view(), name='horarios_livres'),
 ]

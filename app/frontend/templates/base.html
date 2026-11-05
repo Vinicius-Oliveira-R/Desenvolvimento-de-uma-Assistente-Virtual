@@ -39,6 +39,12 @@
                 <a href="{% url 'equipe' %}" class="nav-item {% if request.resolver_match.url_name == 'equipe' %}active{% endif %}">
                     <i class="bi bi-people me-2"></i> Painel da equipe
                 </a>
+                <button type="button" class="nav-item border-0 bg-transparent w-100 text-start" data-bs-toggle="modal"
+                        data-bs-target="#modal-notificacoes" hx-get="{% url 'notificacoes_pendentes' %}" hx-target="#conteudo-notificacoes">
+                    <i class="bi bi-bell me-2"></i> Notificações
+                    <span class="ms-auto" hx-get="{% url 'notificacoes_contagem' %}" hx-target="this"
+                          hx-trigger="load, every 30s, notificacoes-atualizadas from:body"></span>
+                </button>
                 {% if gerencia_consultas %}
                 <a href="{% url 'consultas' %}" class="nav-item {% if request.resolver_match.url_name in 'consultas nova_consulta editar_consulta' %}active{% endif %}">
                     <i class="bi bi-calendar-check me-2"></i> Consultas
@@ -65,6 +71,12 @@
                 <a href="{% url 'calendario' %}" class="nav-item {% if request.resolver_match.url_name == 'calendario' %}active{% endif %}">
                     <i class="bi bi-calendar3 me-2"></i> Meus Agendamentos
                 </a>
+                <button type="button" class="nav-item border-0 bg-transparent w-100 text-start" data-bs-toggle="modal"
+                        data-bs-target="#modal-notificacoes" hx-get="{% url 'notificacoes_pendentes' %}" hx-target="#conteudo-notificacoes">
+                    <i class="bi bi-bell me-2"></i> Notificações
+                    <span class="ms-auto" hx-get="{% url 'notificacoes_contagem' %}" hx-target="this"
+                          hx-trigger="load, every 30s, notificacoes-atualizadas from:body"></span>
+                </button>
             </nav>
             {% endif %}
 
@@ -97,6 +109,17 @@
                 </div>
             </div>
         </aside>
+        <div class="modal fade" id="modal-notificacoes" tabindex="-1" aria-labelledby="titulo-notificacoes" aria-hidden="true">
+            <div class="modal-dialog modal-dialog-scrollable">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title" id="titulo-notificacoes"><i class="bi bi-bell me-2"></i>Notificações</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
+                    </div>
+                    <div class="modal-body" id="conteudo-notificacoes"><p class="text-secondary mb-0">Carregando…</p></div>
+                </div>
+            </div>
+        </div>
         {% endblock %}
 
         <!-- Área Principal de Conteúdo -->

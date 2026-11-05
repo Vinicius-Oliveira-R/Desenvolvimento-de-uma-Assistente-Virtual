@@ -60,6 +60,15 @@ Ninguém cadastra um `gestor` pela API, nem outro gestor: essa conta só é cria
 
 O cadastro de um paciente tem duas etapas: `POST /api/auth/register` cria o usuário (com o `papel`) e `POST /api/pacientes` cria a ficha vinculada a ele (`usuario_id`). Sem token, essas rotas respondem 401; com um perfil sem permissão, 403.
 
+## Pedidos de remarcação e cancelamento
+
+Toda remarcação ou cancelamento pede confirmação de quem solicita ("Tem certeza?" na tela da equipe; "sim" no chat do paciente).
+
+- Quando a atendente ou o médico remarca ou cancela, por padrão a consulta **não muda**: o paciente recebe um pedido (`POST /api/consultas/{id}/solicitacoes`) e a alteração só acontece quando ele aceita (`POST /api/notificacoes/{id}/responder`), pela mesma operação atômica com `SELECT ... FOR UPDATE`. Se o paciente já confirmou pessoalmente ou por telefone, a equipe pode marcar "aplicar agora", e o paciente recebe um aviso.
+- O paciente vê os pedidos no sino de notificações (com contador) e também no chat, onde responde com "sim" ou "não".
+- Quando o paciente cancela pelo chat, o médico vinculado à consulta e as atendentes recebem um aviso; quando ele responde a um pedido, quem pediu também é avisado.
+- `GET /api/notificacoes` lista as notificações pendentes do usuário logado.
+
 ## Instalação
 
 ```bash

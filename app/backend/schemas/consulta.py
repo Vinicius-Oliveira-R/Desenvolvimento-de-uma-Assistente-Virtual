@@ -68,6 +68,7 @@ class ConsultaAgendaOut(ConsultaDetalhadaOut):
     horario_id: int
     paciente_id: int
     paciente_nome: str
+    solicitacao_pendente: str | None = None
 
     @classmethod
     def from_agenda(

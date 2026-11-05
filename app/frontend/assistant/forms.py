@@ -96,7 +96,6 @@ class CadastroUsuarioForm(forms.Form):
 
 
 SITUACOES = (("agendada", "Agendada"), ("realizada", "Realizada"), ("cancelada", "Cancelada"))
-MANTER_HORARIO = "Manter o horário atual"
 
 
 def opcoes_de_horario(horarios: Sequence[HorarioLivre], vazio: str) -> list[tuple[str | int, str]]:
@@ -185,42 +184,60 @@ class AgendamentoForm(forms.Form):
         }
 
 
-class AlteracaoConsultaForm(forms.Form):
+class RemarcacaoForm(forms.Form):
     medico_id = forms.TypedChoiceField(label="Médico", coerce=int)
     data = forms.DateField(label="Data", widget=_campo_de_data())
-    horario_id = forms.TypedChoiceField(label="Novo horário", required=False, coerce=int, empty_value=None)
-    status = forms.ChoiceField(label="Situação", choices=SITUACOES[:2])
-    observacao = forms.CharField(
-        label="Observação", required=False, max_length=500, widget=forms.Textarea(attrs={"rows": 2})
+    horario_id = forms.TypedChoiceField(label="Novo horário", coerce=int)
+    motivo = forms.CharField(label="Motivo (aparece para o paciente)", required=False, max_length=200)
+    aplicar_agora = forms.BooleanField(
+        label="O paciente já confirmou comigo (pessoalmente ou por telefone): remarcar agora", required=False
     )
-    confirmado = forms.BooleanField(label="O paciente confirmou a alteração")
 
     def __init__(
         self, *args, medicos: Sequence[MedicoResumo], horarios: Sequence[HorarioLivre], url_horarios: str, **kwargs
     ):
         super().__init__(*args, **kwargs)
+        self.horarios = {horario.id: horario for horario in horarios}
+        self.medicos = {medico.id: medico for medico in medicos}
         self.fields["medico_id"].choices = _opcoes_de_medico(medicos, "Selecione")
-        self.fields["horario_id"].choices = opcoes_de_horario(horarios, MANTER_HORARIO)
+        self.fields["horario_id"].choices = opcoes_de_horario(horarios, "Selecione")
         _recarregar_horarios_ao_mudar(self, url_horarios)
 
-    def clean(self) -> dict[str, Any]:
-        dados = super().clean()
-        if {"medico_id", "data"} & set(self.changed_data) and not dados.get("horario_id"):
-            self.add_error("horario_id", "Para mudar o médico ou a data, escolha um novo horário.")
-        return dados
+    def destino(self) -> str:
+        dados = self.cleaned_data
+        horario = self.horarios[dados["horario_id"]]
+        return f"{dados['data']:%d/%m/%Y} às {horario.hora_inicio} com {self.medicos[dados['medico_id']].nome}"
+
+    def pedido_ao_paciente(self) -> dict[str, Any]:
+        dados = self.cleaned_data
+        return {"tipo": "reagendamento", "horario_id": dados["horario_id"], "motivo": dados["motivo"] or None}
+
+    def alteracao_direta(self) -> dict[str, Any]:
+        return {"horario_id": self.cleaned_data["horario_id"], "confirmado": True}
+
+
+class SituacaoForm(forms.Form):
+    prefix = "situacao"
+
+    status = forms.ChoiceField(label="Situação", choices=SITUACOES[:2])
+    observacao = forms.CharField(
+        label="Observação", required=False, max_length=500, widget=forms.Textarea(attrs={"rows": 2})
+    )
 
     def dados_para_api(self) -> dict[str, Any]:
-        dados = self.cleaned_data
-        alteracao = {"status": dados["status"], "observacao": dados["observacao"], "confirmado": True}
-        if dados["horario_id"]:
-            alteracao["horario_id"] = dados["horario_id"]
-        return alteracao
+        return {**self.cleaned_data, "confirmado": True}
 
 
 class CancelamentoForm(forms.Form):
     prefix = "cancelamento"
 
-    confirmado = forms.BooleanField(label="O paciente confirmou o cancelamento")
+    motivo = forms.CharField(label="Motivo (aparece para o paciente)", required=False, max_length=200)
+    aplicar_agora = forms.BooleanField(
+        label="O paciente já confirmou comigo (pessoalmente ou por telefone): cancelar agora", required=False
+    )
+
+    def pedido_ao_paciente(self) -> dict[str, Any]:
+        return {"tipo": "cancelamento", "motivo": self.cleaned_data["motivo"] or None}
 
 
 class LiberacaoHorariosForm(forms.Form):

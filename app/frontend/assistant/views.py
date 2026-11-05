@@ -13,17 +13,17 @@ from django.utils import timezone
 from django.views import View
 from django.views.generic import TemplateView
 
-from assistant.api_client import ApiError, HorarioLivre, PermissaoNegadaError, RespostaAssistente
+from assistant.api_client import ApiError, ConsultaAgendada, HorarioLivre, PermissaoNegadaError, RespostaAssistente
 from assistant.forms import (
-    MANTER_HORARIO,
     AgendamentoForm,
-    AlteracaoConsultaForm,
     CadastroUsuarioForm,
     CancelamentoForm,
     FiltroConsultasForm,
     LiberacaoHorariosForm,
     LoginForm,
     MensagemForm,
+    RemarcacaoForm,
+    SituacaoForm,
     opcoes_de_horario,
 )
 from assistant.mixins import ClinicaApiMixin
@@ -220,7 +220,36 @@ class NovaConsultaView(GestaoConsultasMixin, TemplateView):
         return self.render_to_response(self.get_context_data(form=form))
 
 
-class EditarConsultaView(GestaoConsultasMixin, TemplateView):
+class AcaoComConfirmacaoMixin:
+    """Toda remarcação ou cancelamento passa por um "Tem certeza?" antes de ser enviado."""
+
+    template_de_confirmacao = "equipe/confirmar_acao.html"
+
+    def pedir_confirmacao(self, request: HttpRequest, consulta: ConsultaAgendada, resumo: str, aviso: str):
+        campos = [
+            (nome, valor)
+            for nome, valores in request.POST.lists()
+            if nome not in ("csrfmiddlewaretoken", "confirmar")
+            for valor in valores
+        ]
+        contexto = {"consulta": consulta, "resumo": resumo, "aviso": aviso, "campos": campos, "acao": request.path}
+        return TemplateResponse(request, self.template_de_confirmacao, contexto)
+
+
+def _consulta_atual(consulta: ConsultaAgendada) -> str:
+    quando = f"{consulta.data:%d/%m/%Y} às {consulta.hora_inicio}"
+    return f"a consulta de {consulta.paciente_nome} com {consulta.medico_nome} de {quando}"
+
+
+AVISO_DE_PEDIDO = "A consulta só muda quando o paciente aceitar. Ele recebe o pedido nas notificações e no chat."
+AVISO_IMEDIATO = "A mudança vale agora e o paciente recebe um aviso."
+
+
+def _aviso(aplicar_agora: bool) -> str:
+    return AVISO_IMEDIATO if aplicar_agora else AVISO_DE_PEDIDO
+
+
+class EditarConsultaView(AcaoComConfirmacaoMixin, GestaoConsultasMixin, TemplateView):
     template_name = "equipe/consulta_editar.html"
 
     async def get(self, request: HttpRequest, consulta_id: int, *args, **kwargs) -> HttpResponse:
@@ -243,56 +272,87 @@ class EditarConsultaView(GestaoConsultasMixin, TemplateView):
                 return redirect("consultas")
             return self.render_to_response(self.get_context_data(erro=API_INDISPONIVEL))
 
-        inicial = {
-            "medico_id": consulta.medico_id,
-            "data": consulta.data,
-            "status": consulta.status if consulta.status != "cancelada" else "agendada",
-            "observacao": consulta.observacao or "",
-        }
-        form = AlteracaoConsultaForm(
+        remarcacao = RemarcacaoForm(
             dados,
-            initial=inicial,
+            initial={"medico_id": consulta.medico_id, "data": consulta.data},
             medicos=medicos,
             horarios=horarios,
-            url_horarios=f"{reverse('horarios_livres')}?modo=remarcar",
+            url_horarios=reverse("horarios_livres"),
         )
-        if dados is not None and form.is_valid():
+        if dados is not None and remarcacao.is_valid():
+            aplicar_agora = remarcacao.cleaned_data["aplicar_agora"]
+            if "confirmar" not in dados:
+                verbo = "Remarcar agora" if aplicar_agora else "Pedir ao paciente para remarcar"
+                resumo = f"{verbo} {_consulta_atual(consulta)} para {remarcacao.destino()}?"
+                return self.pedir_confirmacao(request, consulta, resumo, _aviso(aplicar_agora))
             try:
-                await cliente.update_appointment(self.token, consulta_id, form.dados_para_api())
+                if aplicar_agora:
+                    await cliente.update_appointment(self.token, consulta_id, remarcacao.alteracao_direta())
+                else:
+                    await cliente.request_change(self.token, consulta_id, remarcacao.pedido_ao_paciente())
             except ApiError as exc:
-                form.add_error(None, exc.mensagem)
+                remarcacao.add_error(None, exc.mensagem)
             else:
-                messages.success(request, "Consulta atualizada.")
+                sucesso = "Consulta remarcada." if aplicar_agora else "Pedido de remarcação enviado ao paciente."
+                messages.success(request, sucesso)
                 return redirect("consultas")
-        contexto = self.get_context_data(consulta=consulta, form=form, cancelamento=CancelamentoForm())
-        return self.render_to_response(contexto)
+
+        situacao = SituacaoForm(initial={"status": consulta.status, "observacao": consulta.observacao or ""})
+        contexto = {"consulta": consulta, "form": remarcacao, "situacao": situacao, "cancelamento": CancelamentoForm()}
+        return self.render_to_response(self.get_context_data(**contexto))
 
 
-class CancelarConsultaView(GestaoConsultasMixin, View):
+class SituacaoConsultaView(GestaoConsultasMixin, View):
     async def post(self, request: HttpRequest, consulta_id: int, *args, **kwargs) -> HttpResponse:
-        if not CancelamentoForm(request.POST).is_valid():
-            messages.error(request, "Marque a confirmação do paciente para cancelar a consulta.")
+        form = SituacaoForm(request.POST)
+        if not form.is_valid():
+            messages.error(request, "Não foi possível salvar a situação da consulta.")
             return redirect("editar_consulta", consulta_id=consulta_id)
         try:
-            await self.get_api_client().cancel_appointment(self.token, consulta_id)
+            await self.get_api_client().update_appointment(self.token, consulta_id, form.dados_para_api())
+        except ApiError as exc:
+            messages.error(request, exc.mensagem)
+        else:
+            messages.success(request, "Situação da consulta atualizada.")
+        return redirect("editar_consulta", consulta_id=consulta_id)
+
+
+class CancelarConsultaView(AcaoComConfirmacaoMixin, GestaoConsultasMixin, View):
+    async def post(self, request: HttpRequest, consulta_id: int, *args, **kwargs) -> HttpResponse:
+        form = CancelamentoForm(request.POST)
+        cliente = self.get_api_client()
+        if not form.is_valid():
+            messages.error(request, "Revise o motivo do cancelamento.")
+            return redirect("editar_consulta", consulta_id=consulta_id)
+        aplicar_agora = form.cleaned_data["aplicar_agora"]
+        try:
+            if "confirmar" not in request.POST:
+                consulta = await cliente.get_appointment(self.token, consulta_id)
+                verbo = "Cancelar agora" if aplicar_agora else "Pedir ao paciente para cancelar"
+                resumo = f"{verbo} {_consulta_atual(consulta)}?"
+                return self.pedir_confirmacao(request, consulta, resumo, _aviso(aplicar_agora))
+            if aplicar_agora:
+                await cliente.cancel_appointment(self.token, consulta_id)
+            else:
+                await cliente.request_change(self.token, consulta_id, form.pedido_ao_paciente())
         except ApiError as exc:
             messages.error(request, exc.mensagem)
             return redirect("editar_consulta", consulta_id=consulta_id)
-        messages.success(request, "Consulta cancelada. O horário foi liberado.")
+        if aplicar_agora:
+            messages.success(request, "Consulta cancelada. O horário foi liberado e o paciente foi avisado.")
+        else:
+            messages.success(request, "Pedido de cancelamento enviado ao paciente.")
         return redirect("consultas")
 
 
 class HorariosLivresView(GestaoConsultasMixin, View):
     async def get(self, request: HttpRequest, *args, **kwargs) -> HttpResponse:
         escolha = _medico_e_data(request.GET)
-        remarcando = request.GET.get("modo") == "remarcar"
         try:
             horarios = await self.horarios_livres(escolha)
         except ApiError:
             horarios = []
-        if remarcando:
-            vazio = MANTER_HORARIO
-        elif escolha is None:
+        if escolha is None:
             vazio = "Escolha o médico e a data"
         else:
             vazio = "Selecione" if horarios else "Nenhum horário livre nesse dia"
@@ -359,3 +419,43 @@ class LiberarHorariosView(ClinicaApiMixin, TemplateView):
                 messages.success(request, f"{resultado['criados']} horários liberados.{aviso}")
                 return redirect("liberar_horarios")
         return self.render_to_response(self.get_context_data(form=form))
+
+
+class NotificacoesView(ClinicaApiMixin, View):
+    papeis_permitidos = TODOS
+    template = "assistant/partials/notificacoes_modal.html"
+
+    async def get(self, request: HttpRequest, *args, **kwargs) -> HttpResponse:
+        return await self.listar(request)
+
+    async def listar(self, request: HttpRequest, resultado: str | None = None, erro: str | None = None) -> HttpResponse:
+        notificacoes = []
+        try:
+            notificacoes = await self.get_api_client().list_notifications(self.token)
+        except ApiError:
+            erro = erro or API_INDISPONIVEL
+        contexto = {"notificacoes": notificacoes, "resultado": resultado, "erro": erro}
+        resposta = TemplateResponse(request, self.template, contexto)
+        resposta["HX-Trigger"] = "notificacoes-atualizadas"
+        return resposta
+
+
+class ResponderNotificacaoView(NotificacoesView):
+    async def post(self, request: HttpRequest, notificacao_id: int, *args, **kwargs) -> HttpResponse:
+        aceitar = request.POST.get("aceitar") == "sim"
+        try:
+            await self.get_api_client().respond_notification(self.token, notificacao_id, aceitar)
+        except ApiError as exc:
+            return await self.listar(request, erro=exc.mensagem)
+        return await self.listar(request, resultado="Resposta registrada." if aceitar else "Pedido recusado.")
+
+
+class ContagemNotificacoesView(ClinicaApiMixin, View):
+    papeis_permitidos = TODOS
+
+    async def get(self, request: HttpRequest, *args, **kwargs) -> HttpResponse:
+        try:
+            total = len(await self.get_api_client().list_notifications(self.token))
+        except ApiError:
+            total = 0
+        return TemplateResponse(request, "assistant/partials/contador_notificacoes.html", {"total": total})

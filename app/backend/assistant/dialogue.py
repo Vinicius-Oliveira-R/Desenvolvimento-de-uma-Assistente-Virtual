@@ -17,12 +17,15 @@ from app.backend.assistant.temporal import IntervaloDatas
 from app.backend.core.clock import Clock
 from app.backend.core.exceptions import DomainError, HorarioIndisponivelError
 from app.backend.core.text import normalizar
-from app.backend.models import Horario, Medico, Paciente
+from app.backend.models import Horario, Medico, Paciente, Usuario
+from app.backend.models.notificacao import Notificacao, TipoNotificacao
 from app.backend.repositories.consulta_repository import ConsultaRepository
+from app.backend.repositories.notificacao_repository import NotificacaoRepository
 from app.backend.schemas.assistant import AcaoPendente, CriteriosAgendamento, TipoAcao
 from app.backend.schemas.consulta import ConfirmacaoConsulta, ConsultaCreate, ConsultaDetalhadaOut
 from app.backend.services.agenda_service import AgendaService
 from app.backend.services.consulta_service import ConsultaService
+from app.backend.services.notificacao_service import NotificacaoService
 
 
 class TipoResultado(StrEnum):
@@ -48,6 +51,11 @@ class TipoResultado(StrEnum):
     AGRADECIMENTO = "agradecimento"
     AJUDA = "ajuda"
     PACIENTE_NAO_CADASTRADO = "paciente_nao_cadastrado"
+    SOLICITACAO_REMARCACAO = "solicitacao_remarcacao"
+    SOLICITACAO_CANCELAMENTO = "solicitacao_cancelamento"
+    REMARCACAO_ACEITA = "remarcacao_aceita"
+    CANCELAMENTO_ACEITO = "cancelamento_aceito"
+    SOLICITACAO_RECUSADA = "solicitacao_recusada"
 
 
 class Aviso(StrEnum):
@@ -84,6 +92,7 @@ class OpcaoAgenda:
 class ResultadoDialogo:
     tipo: TipoResultado
     opcao: OpcaoAgenda | None = None
+    opcao_nova: OpcaoAgenda | None = None
     opcoes: tuple[OpcaoAgenda, ...] = ()
     aviso: Aviso | None = None
     especialidade: str | None = None
@@ -95,6 +104,7 @@ class ResultadoDialogo:
 
 
 INTENCAO_DA_ACAO = {TipoAcao.AGENDAR: Intencao.AGENDAR, TipoAcao.CANCELAR: Intencao.CANCELAR}
+APRESENTACOES_DE_SOLICITACAO = (TipoResultado.SOLICITACAO_REMARCACAO, TipoResultado.SOLICITACAO_CANCELAMENTO)
 
 
 def criterios_de(entidades: Entidades) -> CriteriosAgendamento:
@@ -129,17 +139,29 @@ class DialogueManager:
         self.agenda = AgendaService(db, clock)
         self.consultas = ConsultaService(db)
         self.consultas_repository = ConsultaRepository(db)
+        self.notificacoes = NotificacaoService(db)
+        self.db = db
 
     def handle(
-        self, mensagem: MensagemInterpretada, paciente: Paciente, pendente: AcaoPendente | None
+        self,
+        mensagem: MensagemInterpretada,
+        paciente: Paciente,
+        pendente: AcaoPendente | None,
+        solicitacoes_vistas: Sequence[int] = (),
     ) -> ResultadoDialogo:
         if pendente and (continuacao := self._continuar(mensagem, paciente, pendente)):
             return continuacao
+        if pendente is None and (pedido := self._apresentar_solicitacao(paciente, solicitacoes_vistas)):
+            return pedido
         return self._rotear(mensagem, paciente)
 
     def _continuar(
         self, mensagem: MensagemInterpretada, paciente: Paciente, pendente: AcaoPendente
     ) -> ResultadoDialogo | None:
+        if pendente.tipo == TipoAcao.RESPONDER_SOLICITACAO:
+            if mensagem.negativa or mensagem.afirmativa:
+                return self._responder_solicitacao(paciente, pendente.notificacao_id, not mensagem.negativa)
+            return None
         sem_criterios = not mensagem.entidades.possui_criterios
         neutras = (Intencao.DESCONHECIDA, *INTENCOES_DE_RESPOSTA, *INTENCOES_SOCIAIS)
         compativel = mensagem.intencao in (*neutras, INTENCAO_DA_ACAO[pendente.tipo])
@@ -324,12 +346,43 @@ class DialogueManager:
             self.consultas.cancel(consulta.id, ConfirmacaoConsulta(confirmado=True))
         except DomainError:
             return ResultadoDialogo(TipoResultado.CONSULTA_NAO_ENCONTRADA)
+        self.notificacoes.avisar_equipe_sobre_cancelamento(consulta.id)
         detalhada = self._detalhar(consulta.id)
         return ResultadoDialogo(
             TipoResultado.CONSULTA_CANCELADA,
             opcao=OpcaoAgenda.from_consulta(detalhada, consulta.horario_id),
             consulta=detalhada,
         )
+
+    def _apresentar_solicitacao(self, paciente: Paciente, vistas: Sequence[int]) -> ResultadoDialogo | None:
+        notificacao = NotificacaoRepository(self.db).proxima_solicitacao(paciente.usuario_id, vistas)
+        if notificacao is None:
+            return None
+        _, horario, medico, _ = self.consultas_repository.get_da_agenda(notificacao.consulta_id)
+        remarcacao = notificacao.tipo == TipoNotificacao.REAGENDAMENTO_PENDENTE
+        return ResultadoDialogo(
+            TipoResultado.SOLICITACAO_REMARCACAO if remarcacao else TipoResultado.SOLICITACAO_CANCELAMENTO,
+            opcao=OpcaoAgenda.from_horario(horario, medico),
+            opcao_nova=self._opcao_do_horario_novo(notificacao) if remarcacao else None,
+            detalhe=self.db.get(Usuario, notificacao.solicitante_id).nome if notificacao.solicitante_id else None,
+            acao_pendente=AcaoPendente(tipo=TipoAcao.RESPONDER_SOLICITACAO, notificacao_id=notificacao.id),
+        )
+
+    def _opcao_do_horario_novo(self, notificacao: Notificacao) -> OpcaoAgenda:
+        novo = notificacao.horario_novo
+        return OpcaoAgenda.from_horario(novo, self.db.get(Medico, novo.medico_id))
+
+    def _responder_solicitacao(self, paciente: Paciente, notificacao_id: int | None, aceitar: bool) -> ResultadoDialogo:
+        usuario = self.db.get(Usuario, paciente.usuario_id)
+        try:
+            resposta = self.notificacoes.responder(notificacao_id, usuario, aceitar)
+        except DomainError as erro:
+            return ResultadoDialogo(TipoResultado.REGRA_VIOLADA, detalhe=erro.detail)
+        if not aceitar:
+            return ResultadoDialogo(TipoResultado.SOLICITACAO_RECUSADA)
+        if resposta.tipo == TipoNotificacao.REAGENDAMENTO_PENDENTE:
+            return ResultadoDialogo(TipoResultado.REMARCACAO_ACEITA)
+        return ResultadoDialogo(TipoResultado.CANCELAMENTO_ACEITO)
 
     def _listar(self, paciente: Paciente) -> ResultadoDialogo:
         futuras = self._consultas_futuras(paciente)
