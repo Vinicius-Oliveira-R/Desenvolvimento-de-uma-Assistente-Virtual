@@ -139,7 +139,7 @@ AUTHENTICATION_BACKENDS = ['assistant.backends.FastAPIAuthBackend']
 SESSION_COOKIE_AGE = 60 * 60
 
 # Integração com a API FastAPI
-FASTAPI_BASE_URL = os.environ.get('FASTAPI_BASE_URL', 'http://localhost:8000/api')
+FASTAPI_BASE_URL = os.environ.get('FASTAPI_BASE_URL', 'http://127.0.0.1:8000/api')
 FASTAPI_TIMEOUT = float(os.environ.get('FASTAPI_TIMEOUT', '10'))
 ASSISTENTE_EXIBIR_DIAGNOSTICO = DEBUG
 
