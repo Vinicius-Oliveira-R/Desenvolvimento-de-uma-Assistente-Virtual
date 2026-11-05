@@ -43,6 +43,7 @@ class TipoResultado(StrEnum):
     CANCELAMENTO_DESCARTADO = "cancelamento_descartado"
     ORIENTAR_REMARCACAO = "orientar_remarcacao"
     REGRA_VIOLADA = "regra_violada"
+    ORIENTACAO_MEDICA_BLOQUEADA = "orientacao_medica_bloqueada"
     SAUDACAO = "saudacao"
     AGRADECIMENTO = "agradecimento"
     AJUDA = "ajuda"
@@ -182,6 +183,8 @@ class DialogueManager:
                 return self._solicitar_cancelamento(paciente, mensagem.entidades)
             case Intencao.REMARCAR:
                 return ResultadoDialogo(TipoResultado.ORIENTAR_REMARCACAO)
+            case Intencao.ORIENTACAO_MEDICA:
+                return self._recusar_orientacao_medica()
             case Intencao.LISTAR:
                 return self._listar(paciente)
             case Intencao.SAUDACAO:
@@ -190,6 +193,14 @@ class DialogueManager:
                 return ResultadoDialogo(TipoResultado.AGRADECIMENTO)
             case _:
                 return ResultadoDialogo(TipoResultado.AJUDA)
+
+    @staticmethod
+    def _recusar_orientacao_medica() -> ResultadoDialogo:
+        # O sistema não diagnostica nem indica medicamentos: o pedido é recusado e vira oferta de consulta.
+        consulta_com_clinico = AcaoPendente(
+            tipo=TipoAcao.AGENDAR, criterios=CriteriosAgendamento(especialidade=ESPECIALIDADE_PADRAO)
+        )
+        return ResultadoDialogo(TipoResultado.ORIENTACAO_MEDICA_BLOQUEADA, acao_pendente=consulta_com_clinico)
 
     def _agendar(
         self, paciente: Paciente, criterios: CriteriosAgendamento, recusados: Sequence[int] = ()

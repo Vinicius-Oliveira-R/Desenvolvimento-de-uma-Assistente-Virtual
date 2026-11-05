@@ -132,6 +132,17 @@ PADROES_SINAIS: dict[str, list[Padrao]] = {
             _alguma("consultas", "agendamentos"),
         ],
     ],
+    "orientacao_medica": [
+        [_alguma(
+            "remedio", "remedios", "medicamento", "medicamentos", "medicacao", "medicacoes", "receita", "receitas",
+            "receitar", "receite", "prescrever", "prescreva", "prescricao", "diagnostico", "diagnosticar",
+            "tomar", "tomo", "toma", "tomei", "tomando", "tome", "dose", "dosagem", "comprimido", "comprimidos",
+            "xarope", "pomada", "antibiotico", "anti-inflamatorio", "analgesico", "calmante",
+            "dipirona", "paracetamol", "ibuprofeno", "aspirina",
+        )],
+        _termo("o que é bom"),
+        _termo("o que serve"),
+    ],
     "saudacao": [[_alguma("oi", "ola", "opa")], [_alguma("bom", "boa"), _alguma("dia", "tarde", "noite")]],
     "agradecimento": [[_alguma("obrigado", "obrigada", "obg", "valeu", "agradeco", "grato", "grata", "brigado", "brigada")]],
     SINAL_AFIRMACAO: [[_alguma(

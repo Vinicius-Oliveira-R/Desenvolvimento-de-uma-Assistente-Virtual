@@ -120,6 +120,12 @@ class SimplifiedStyle(ResponseStyle):
             "2. Depois, marque uma nova.\nExemplo: \"desmarcar consulta do dia 20\"."
         ),
         TipoResultado.REGRA_VIOLADA: "{detalhe}",
+        TipoResultado.ORIENTACAO_MEDICA_BLOQUEADA: (
+            "Me perdoe, mas eu sou apenas um assistente do computador.\n"
+            "Não posso indicar remédios nem dizer qual é a doença.\n"
+            "Tomar remédio sem orientação do médico é perigoso para a sua saúde.\n"
+            "Quer que eu marque uma consulta com o médico para ele avaliar?"
+        ),
         TipoResultado.SAUDACAO: (
             "Olá! Eu ajudo a marcar consultas.\nO que você quer fazer?\n"
             "1. Marcar consulta.\n2. Ver minhas consultas.\n3. Desmarcar consulta."
@@ -222,6 +228,10 @@ class StandardStyle(ResponseStyle):
             "e depois agende o novo horário."
         ),
         TipoResultado.REGRA_VIOLADA: "{detalhe}",
+        TipoResultado.ORIENTACAO_MEDICA_BLOQUEADA: (
+            "Como assistente virtual, não tenho permissão para realizar diagnósticos ou indicar medicamentos. "
+            "Deseja agendar uma consulta com um Clínico Geral para avaliar seus sintomas?"
+        ),
         TipoResultado.SAUDACAO: "Olá! Posso agendar, listar ou cancelar consultas. Como posso ajudar?",
         TipoResultado.AGRADECIMENTO: "Por nada! Precisando, é só chamar.",
         TipoResultado.AJUDA: (

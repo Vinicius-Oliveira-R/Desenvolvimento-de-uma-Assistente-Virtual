@@ -147,6 +147,54 @@ def test_pergunta_de_especialidade_respeita_desistencia_e_mudanca_de_assunto(
     assert resposta["contexto"]["acao_pendente"] is None
 
 
+def test_pedido_de_remedio_do_paciente_padrao_e_bloqueado_e_vira_oferta_de_consulta(api: ClinicaApi) -> None:
+    headers, horarios = _paciente_com_clinico_e_ortopedista(api)
+    conversa = api.conversa(headers)
+
+    recusa = conversa.enviar("Estou com dor de cabeça, qual remédio eu devo tomar?")
+
+    assert recusa["perfil"] == "PADRAO"
+    assert recusa["intencao"] == "orientacao_medica"
+    assert recusa["resultado"] == "orientacao_medica_bloqueada"
+    assert recusa["resposta"] == (
+        "Como assistente virtual, não tenho permissão para realizar diagnósticos ou indicar medicamentos. "
+        "Deseja agendar uma consulta com um Clínico Geral para avaliar seus sintomas?"
+    )
+    assert recusa["contexto"]["acao_pendente"]["criterios"]["especialidade"] == "Clínica Geral"
+    assert all(api.horario_disponivel(horario) for horario in horarios.values())
+
+    assert conversa.enviar("não")["resultado"] == "agendamento_descartado"
+
+
+def test_pedido_de_remedio_do_paciente_idoso_e_recusado_com_linguagem_simples_e_leva_a_consulta(
+    api: ClinicaApi,
+) -> None:
+    headers, horarios = _paciente_com_clinico_e_ortopedista(api)
+    conversa = api.conversa(headers)
+
+    recusa = conversa.enviar("to com dor de cabeca q nao passa, qual remedio eu tomo")
+    sugestao = conversa.enviar("sim")
+    confirmacao = conversa.enviar("sim")
+
+    assert recusa["perfil"] == "IDOSO"
+    assert recusa["resultado"] == "orientacao_medica_bloqueada"
+    assert "Não posso indicar remédios nem dizer qual é a doença." in recusa["resposta"]
+    assert sugestao["contexto"]["acao_pendente"]["horario_id"] == horarios["Clínica Geral"]
+    assert confirmacao["resultado"] == "consulta_agendada"
+    assert confirmacao["consulta"]["especialidade"] == "Clínica Geral"
+
+
+def test_pedido_de_remedio_no_meio_de_um_agendamento_e_bloqueado_sem_marcar_nada(api: ClinicaApi) -> None:
+    headers, horarios = _paciente_com_clinico_e_ortopedista(api)
+    conversa = api.conversa(headers)
+    conversa.enviar("quero marcar uma consulta para ver minha dor nas costas")
+
+    resposta = conversa.enviar("qual remédio eu tomo até lá?")
+
+    assert resposta["resultado"] == "orientacao_medica_bloqueada"
+    assert api.horario_disponivel(horarios["Ortopedia"])
+
+
 def test_usuario_sem_cadastro_de_paciente_e_orientado(api: ClinicaApi) -> None:
     token = api.client.post(
         "/api/auth/register", json={"nome": "Sem Cadastro", "email": "sem@email.com", "senha": "senha123"}

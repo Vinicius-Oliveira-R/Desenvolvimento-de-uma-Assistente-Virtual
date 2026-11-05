@@ -31,6 +31,7 @@ class Intencao(StrEnum):
     CANCELAR = "cancelar"
     REMARCAR = "remarcar"
     LISTAR = "listar"
+    ORIENTACAO_MEDICA = "orientacao_medica"
     CONFIRMAR = "confirmar"
     NEGAR = "negar"
     SAUDACAO = "saudacao"
@@ -158,6 +159,8 @@ class MessageInterpreter:
         for intencao in INTENCOES_DE_ACAO:
             if intencao in sinais:
                 return intencao
+        if Intencao.ORIENTACAO_MEDICA in sinais:
+            return Intencao.ORIENTACAO_MEDICA
         if entidades.especialidade or entidades.medico or SINAL_MENCAO_CONSULTA in sinais:
             return Intencao.AGENDAR
         if negativa:

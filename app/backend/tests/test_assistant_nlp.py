@@ -111,6 +111,28 @@ def test_qualquer_dia_nao_e_confundido_com_falta_de_preferencia_de_medico(interp
     assert not interpretador.interpret("qualquer dia serve").sem_preferencia
 
 
+@pytest.mark.parametrize(
+    "texto",
+    [
+        "estou com dor de cabeça, qual remédio eu tomo",
+        "pode me receitar um remédio?",
+        "posso tomar dipirona?",
+        "o que é bom pra dor nas costas?",
+        "preciso de um diagnóstico",
+    ],
+)
+def test_pedido_de_remedio_ou_diagnostico_e_classificado_como_orientacao_medica(
+    interpretador: MessageInterpreter, texto: str
+) -> None:
+    assert interpretador.interpret(texto).intencao == Intencao.ORIENTACAO_MEDICA
+
+
+def test_pedido_explicito_de_agendamento_prevalece_sobre_a_mencao_a_receita(interpretador: MessageInterpreter) -> None:
+    mensagem = interpretador.interpret("quero marcar uma consulta para renovar minha receita")
+
+    assert mensagem.intencao == Intencao.AGENDAR
+
+
 def test_detecta_confirmacao_negacao_e_pedido_de_outra_opcao(interpretador: MessageInterpreter) -> None:
     assert interpretador.interpret("sim, pode marcar!").afirmativa
     assert interpretador.interpret("não, obrigado").negativa
