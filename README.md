@@ -47,13 +47,16 @@ Pipeline do assistente (`POST /api/assistant/chat`):
 
 ## Perfis de acesso (RBAC)
 
-Cada usuário tem um `papel`: `admin` (atendente), `medico` ou `paciente`. O papel é conferido no banco a cada requisição, a partir do usuário identificado pelo token JWT.
+Cada usuário tem um `papel`: `gestor` (responsável pela clínica), `admin` (atendente), `medico` ou `paciente`. O papel é conferido no banco a cada requisição, a partir do usuário identificado pelo token JWT.
 
 | Usuário logado | Cadastra usuários (`POST /api/auth/register`) | Pacientes (`POST`/`GET /api/pacientes`) | Médicos (`POST /api/medicos`) |
 |---|---|---|---|
+| `gestor` | médicos e atendentes | não | sim |
 | `admin` | pacientes e atendentes | sim | não |
 | `medico` | pacientes, atendentes e médicos | sim | sim |
 | `paciente` | não | não | não |
+
+Ninguém cadastra um `gestor` pela API, nem outro gestor: essa conta só é criada direto no banco, pelo seed. As permissões de cadastro ficam em um único lugar, `PAPEIS_CADASTRAVEIS` em `app/backend/models/usuario.py`.
 
 O cadastro de um paciente tem duas etapas: `POST /api/auth/register` cria o usuário (com o `papel`) e `POST /api/pacientes` cria a ficha vinculada a ele (`usuario_id`). Sem token, essas rotas respondem 401; com um perfil sem permissão, 403.
 
@@ -71,14 +74,25 @@ Copie `app/backend/.env.example` para `app/backend/.env` e ajuste as variáveis 
 
 O front-end lê variáveis de ambiente opcionais: `FASTAPI_BASE_URL` (padrão `http://127.0.0.1:8000/api`), `DJANGO_SECRET_KEY`, `DJANGO_DEBUG` e `DJANGO_ALLOWED_HOSTS`.
 
-> **Banco já existente:** o `create_all` não altera tabelas que já existem. Em um PostgreSQL criado por versões anteriores, execute o SQL abaixo e rode o seed de novo, para criar os usuários de atendente e de médico. Em um banco SQLite de demonstração, basta apagar o arquivo e rodar o seed.
->
-> ```sql
-> ALTER TABLE consultas DROP CONSTRAINT IF EXISTS uq_consulta_medico_horario_status;
-> CREATE UNIQUE INDEX IF NOT EXISTS uq_consulta_horario_ativa ON consultas (horario_id) WHERE status <> 'cancelada';
-> ALTER TABLE usuarios RENAME COLUMN tipo TO papel;
-> UPDATE usuarios SET papel = 'paciente' WHERE papel NOT IN ('admin', 'medico', 'paciente');
-> ```
+### Banco já existente
+
+O `create_all` não altera tabelas que já existem. Em um banco SQLite de demonstração, basta apagar o arquivo e rodar o seed. Em um PostgreSQL criado por versões anteriores, execute o SQL do seu caso e depois rode o seed, que cria os usuários de gestor, atendente e médico.
+
+Banco criado antes dos perfis de acesso (a tabela `usuarios` ainda tem a coluna `tipo`):
+
+```sql
+ALTER TABLE consultas DROP CONSTRAINT IF EXISTS uq_consulta_medico_horario_status;
+CREATE UNIQUE INDEX IF NOT EXISTS uq_consulta_horario_ativa ON consultas (horario_id) WHERE status <> 'cancelada';
+ALTER TABLE usuarios RENAME COLUMN tipo TO papel;
+UPDATE usuarios SET papel = 'paciente' WHERE papel NOT IN ('admin', 'medico', 'paciente');
+```
+
+Qualquer banco criado antes do papel `gestor` (inclusive depois do SQL acima):
+
+```sql
+ALTER TABLE usuarios DROP CONSTRAINT IF EXISTS papelusuario;
+ALTER TABLE usuarios ADD CONSTRAINT papelusuario CHECK (papel IN ('gestor', 'admin', 'medico', 'paciente'));
+```
 
 ## Execução
 
@@ -97,7 +111,7 @@ python manage.py migrate
 python manage.py runserver 8001                 # front-end em http://127.0.0.1:8001
 ```
 
-Usuários de demonstração (senha `senha123`): `recepcao@clinica.com` (atendente, `admin`), `joao.mendes@clinica.com` (`medico`), `lurdes@clinica.com` e `carlos@clinica.com` (`paciente`). O site Django é a área do paciente.
+Usuários de demonstração (senha `senha123`): `gestor@clinica.com` (`gestor`), `recepcao@clinica.com` (atendente, `admin`), `joao.mendes@clinica.com` (`medico`), `lurdes@clinica.com` e `carlos@clinica.com` (`paciente`). O site Django é a área do paciente.
 
 ## Testes
 
