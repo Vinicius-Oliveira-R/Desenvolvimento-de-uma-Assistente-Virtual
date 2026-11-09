@@ -2,3 +2,5 @@ Django==6.1.2
 django-crispy-forms==2.7
 crispy-bootstrap5==2026.9
 httpx==0.27.2
+gunicorn>=22,<24
+whitenoise>=6,<7
