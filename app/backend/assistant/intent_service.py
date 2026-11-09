@@ -1,168 +1,125 @@
 import re
+from dataclasses import dataclass
+from datetime import date
 from typing import Any
 
-from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
+from app.backend.assistant.nlp import Intencao, MessageInterpreter, get_language_processor
+from app.backend.assistant.temporal import TemporalResolver
+from app.backend.core.clock import Clock
+from app.backend.core.exceptions import BusinessRuleError, NotFoundError
 from app.backend.models import Horario, Medico, Paciente
-from app.backend.schemas.consulta import ConsultaCreate
+from app.backend.repositories.paciente_repository import PacienteRepository
+from app.backend.schemas.consulta import ConsultaCreate, ConsultaOut
+from app.backend.services.agenda_service import AgendaService
 from app.backend.services.consulta_service import ConsultaService
 
 
+@dataclass(frozen=True)
+class _PedidoAgendamento:
+    medico_citado: str | None
+    medico: Medico | None
+    paciente_citado: str | None
+    paciente: Paciente | None
+    data: date | None
+    hora: str | None
+    horario: Horario | None
+
+
 class AssistantIntentService:
-    def __init__(self, db: Session):
+    def __init__(self, db: Session, clock: Clock):
         self.db = db
+        self.interpreter = MessageInterpreter(get_language_processor(), TemporalResolver(clock))
+        self.agenda = AgendaService(db, clock)
+        self.pacientes = PacienteRepository(db)
 
     @staticmethod
     def _normalize_text(value: str) -> str:
         return re.sub(r"\s+", " ", value.strip().lower())
 
     def interpret(self, mensagem: str) -> dict[str, Any]:
-        text = self._normalize_text(mensagem)
-
-        intent = "agendar_consulta" if "agendar" in text or "consulta" in text else "desconhecida"
-
-        doctor_name = self._extract_doctor_name(text)
-        data = self._extract_date(text)
-        hora = self._extract_time(text)
-        patient_name = self._extract_patient_name(text)
-
-        if intent == "desconhecida":
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Intenção não reconhecida")
-
-        doctor = self.db.query(Medico).filter(Medico.nome.ilike(f"%{doctor_name}%")).first() if doctor_name else None
-        if doctor_name and not doctor:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Médico não encontrado")
-
-        patient = (
-            self.db.query(Paciente).filter(Paciente.nome.ilike(f"%{patient_name}%")).first() if patient_name else None
-        )
-        if patient_name and not patient:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Paciente não encontrado")
-
-        slot = None
-        if doctor and data and hora:
-            slot = (
-                self.db.query(Horario)
-                .filter(
-                    Horario.medico_id == doctor.id,
-                    Horario.data == data,
-                    Horario.hora_inicio == hora,
-                )
-                .first()
-            )
-
-        status_text = "slot_disponivel" if slot and slot.disponivel else "slot_indisponivel"
-
+        pedido = self._analisar(mensagem)
         return {
-            "intent": intent,
-            "doctor": doctor.nome if doctor else doctor_name,
-            "data": data,
-            "hora": hora,
-            "patient": patient.nome if patient else patient_name,
-            "status": status_text,
-            "slot_id": slot.id if slot else None,
+            "intent": "agendar_consulta",
+            "doctor": pedido.medico.nome if pedido.medico else pedido.medico_citado,
+            "data": pedido.data.isoformat() if pedido.data else None,
+            "hora": pedido.hora,
+            "patient": pedido.paciente.nome if pedido.paciente else pedido.paciente_citado,
+            "status": "slot_disponivel" if pedido.horario and pedido.horario.disponivel else "slot_indisponivel",
+            "slot_id": pedido.horario.id if pedido.horario else None,
         }
 
-    def schedule_from_message(self, mensagem: str) -> dict[str, Any]:
-        parsed = self.interpret(mensagem)
-        doctor_name = parsed["doctor"]
-        patient_name = parsed["patient"]
-        data = parsed["data"]
-        hora = parsed["hora"]
+    def schedule_from_message(self, mensagem: str) -> ConsultaOut:
+        pedido = self._analisar(mensagem)
+        if not (pedido.medico and pedido.paciente and pedido.data and pedido.hora):
+            raise BusinessRuleError("Mensagem incompleta para agendamento")
+        if pedido.horario is None:
+            raise NotFoundError("Horário não encontrado")
 
-        if not doctor_name or not patient_name or not data or not hora:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Mensagem incompleta para agendamento")
-
-        doctor = self.db.query(Medico).filter(Medico.nome.ilike(f"%{doctor_name}%")).first()
-        if not doctor:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Médico não encontrado")
-
-        patient = self.db.query(Paciente).filter(Paciente.nome.ilike(f"%{patient_name}%")).first()
-        if not patient:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Paciente não encontrado")
-
-        slot = (
-            self.db.query(Horario)
-            .filter(Horario.medico_id == doctor.id, Horario.data == data, Horario.hora_inicio == hora)
-            .first()
+        return ConsultaService(self.db).create(
+            ConsultaCreate(
+                paciente_id=pedido.paciente.id,
+                medico_id=pedido.medico.id,
+                horario_id=pedido.horario.id,
+                data=pedido.horario.data,
+                observacao="Agendamento realizado pelo assistente",
+            )
         )
-        if not slot:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Horário não encontrado")
-
-        consulta_payload = ConsultaCreate(
-            paciente_id=patient.id,
-            medico_id=doctor.id,
-            horario_id=slot.id,
-            data=data,
-            observacao="Agendamento realizado pelo assistente",
-        )
-        return ConsultaService(self.db).create(consulta_payload)
 
     def recommend_best_slot(self, mensagem: str) -> dict[str, Any]:
-        text = self._normalize_text(mensagem)
+        especialidade = self.interpreter.interpret(mensagem).entidades.especialidade
+        if not especialidade:
+            raise BusinessRuleError("Especialidade não identificada")
 
-        specialty = self._extract_specialty(text)
-        if not specialty:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Especialidade não identificada")
+        medicos = self.agenda.find_doctors_by_specialty(especialidade)
+        horarios = self.agenda.next_available([medico.id for medico in medicos]) if medicos else []
+        if not horarios:
+            raise NotFoundError("Nenhum horário disponível encontrado")
 
-        candidates = (
-            self.db.query(Horario, Medico)
-            .join(Medico, Horario.medico_id == Medico.id)
-            .filter(Medico.especialidade.ilike(f"%{specialty}%"), Horario.disponivel.is_(True))
-            .order_by(Horario.data.asc(), Horario.hora_inicio.asc())
-            .all()
-        )
-
-        if not candidates:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Nenhum horário disponível encontrado")
-
-        horario, medico = candidates[0]
-        suggestion = (
-            f"Sugestão: {medico.nome} - {medico.especialidade} - {horario.data} às {horario.hora_inicio}."
-        )
-
+        horario = horarios[0]
+        medico = next(medico for medico in medicos if medico.id == horario.medico_id)
         return {
             "especialidade": medico.especialidade,
             "medico": medico.nome,
             "data": horario.data,
             "hora": horario.hora_inicio,
-            "mensagem": suggestion,
+            "mensagem": f"Sugestão: {medico.nome} - {medico.especialidade} - {horario.data} às {horario.hora_inicio}.",
         }
 
-    @staticmethod
-    def _extract_specialty(text: str) -> str | None:
-        for keyword in ["cardiologia", "neurologia", "pediatria", "dermatologia", "ortopedia", "ginecologia"]:
-            if keyword in text:
-                return keyword.capitalize()
-        return None
+    def _analisar(self, mensagem: str) -> _PedidoAgendamento:
+        interpretacao = self.interpreter.interpret(mensagem)
+        if interpretacao.intencao != Intencao.AGENDAR:
+            raise BusinessRuleError("Intenção não reconhecida")
 
-    @staticmethod
-    def _extract_doctor_name(text: str) -> str | None:
-        segments = text.split(" com ")
-        if len(segments) < 2:
+        entidades = interpretacao.entidades
+        medico = self._localizar_medico(entidades.medico)
+        paciente_citado = self._extract_patient_name(self._normalize_text(mensagem))
+        paciente = self._localizar_paciente(paciente_citado)
+        horario = (
+            self.agenda.find_slot(medico.id, entidades.data, entidades.hora)
+            if medico and entidades.data and entidades.hora
+            else None
+        )
+        return _PedidoAgendamento(
+            entidades.medico, medico, paciente_citado, paciente, entidades.data, entidades.hora, horario
+        )
+
+    def _localizar_medico(self, nome: str | None) -> Medico | None:
+        if not nome:
             return None
+        encontrados = self.agenda.find_doctors_by_name(nome)
+        if not encontrados:
+            raise NotFoundError("Médico não encontrado")
+        return encontrados[0]
 
-        candidate = segments[1]
-        for marker in [" para ", " as ", " às "]:
-            if marker in candidate:
-                candidate = candidate.split(marker, 1)[0]
-        candidate = candidate.strip(" .")
-        return candidate or None
-
-    @staticmethod
-    def _extract_date(text: str) -> str | None:
-        match = re.search(r"(\d{4}-\d{2}-\d{2})", text)
-        if match:
-            return match.group(1)
-        return None
-
-    @staticmethod
-    def _extract_time(text: str) -> str | None:
-        match = re.search(r"(?:as|às)\s+(\d{2}:\d{2})", text)
-        if match:
-            return match.group(1)
-        return None
+    def _localizar_paciente(self, nome: str | None) -> Paciente | None:
+        if not nome:
+            return None
+        paciente = self.pacientes.find_by_name(nome)
+        if not paciente:
+            raise NotFoundError("Paciente não encontrado")
+        return paciente
 
     @staticmethod
     def _extract_patient_name(text: str) -> str | None:

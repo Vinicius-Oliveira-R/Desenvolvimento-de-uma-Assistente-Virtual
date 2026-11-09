@@ -1,14 +1,22 @@
 from fastapi import APIRouter, Depends, status
 from sqlalchemy.orm import Session
 
+from app.backend.assistant.especialidades import CATALOGO
 from app.backend.core.database import get_db
+from app.backend.core.dependencies import require_can_register
+from app.backend.models import PapelUsuario
 from app.backend.schemas.medico import MedicoCreate, MedicoOut
 from app.backend.services.medico_service import MedicoService
 
 router = APIRouter(prefix="/medicos", tags=["medicos"])
 
 
-@router.post("", response_model=MedicoOut, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "",
+    response_model=MedicoOut,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require_can_register(PapelUsuario.MEDICO))],
+)
 def create_medico(payload: MedicoCreate, db: Session = Depends(get_db)) -> MedicoOut:
     return MedicoService(db).create(payload)
 
@@ -16,6 +24,11 @@ def create_medico(payload: MedicoCreate, db: Session = Depends(get_db)) -> Medic
 @router.get("", response_model=list[MedicoOut])
 def list_medicos(db: Session = Depends(get_db)) -> list[MedicoOut]:
     return MedicoService(db).list_all()
+
+
+@router.get("/especialidades", response_model=list[str])
+def list_especialidades() -> list[str]:
+    return [especialidade.nome for especialidade in CATALOGO]
 
 
 @router.get("/{medico_id}", response_model=MedicoOut)

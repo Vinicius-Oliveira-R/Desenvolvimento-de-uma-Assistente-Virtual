@@ -1,6 +1,6 @@
 {% load static %}
 <!DOCTYPE html>
-<html lang="pt-br">
+<html lang="pt-br" data-bs-theme="dark">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -20,8 +20,44 @@
 </head>
 <body>
     <div class="app-container">
+        {% block sidebar %}
         <!-- Sidebar estilo ChatGPT/Claude -->
         <aside class="sidebar" x-data="{ openDropdown: false }">
+            {% if area_da_equipe %}
+            <div class="sidebar-header">
+                <a href="{% url 'cadastro_usuario' %}" class="btn btn-new-chat">
+                    <i class="bi bi-person-plus me-2"></i> Cadastrar usuário
+                </a>
+            </div>
+
+            <nav class="sidebar-nav">
+                {% if e_medico %}
+                <a href="{% url 'agenda_medica' %}" class="nav-item {% if request.resolver_match.url_name == 'agenda_medica' %}active{% endif %}">
+                    <i class="bi bi-calendar-day me-2"></i> Minha agenda
+                </a>
+                {% endif %}
+                <a href="{% url 'equipe' %}" class="nav-item {% if request.resolver_match.url_name == 'equipe' %}active{% endif %}">
+                    <i class="bi bi-people me-2"></i> Painel da equipe
+                </a>
+                <button type="button" class="nav-item border-0 bg-transparent w-100 text-start" data-bs-toggle="modal"
+                        data-bs-target="#modal-notificacoes" hx-get="{% url 'notificacoes_pendentes' %}" hx-target="#conteudo-notificacoes">
+                    <i class="bi bi-bell me-2"></i> Notificações
+                    <span class="ms-auto" hx-get="{% url 'notificacoes_contagem' %}" hx-target="this"
+                          hx-trigger="load, every 30s, notificacoes-atualizadas from:body"></span>
+                </button>
+                {% if gerencia_consultas %}
+                <a href="{% url 'consultas' %}" class="nav-item {% if request.resolver_match.url_name in 'consultas nova_consulta editar_consulta' %}active{% endif %}">
+                    <i class="bi bi-calendar-check me-2"></i> Consultas
+                </a>
+                <a href="{% url 'liberar_horarios' %}" class="nav-item {% if request.resolver_match.url_name == 'liberar_horarios' %}active{% endif %}">
+                    <i class="bi bi-clock-history me-2"></i> Liberar horários
+                </a>
+                {% endif %}
+                <a href="{% url 'cadastro_usuario' %}" class="nav-item {% if request.resolver_match.url_name == 'cadastro_usuario' %}active{% endif %}">
+                    <i class="bi bi-person-plus me-2"></i> Cadastrar usuário
+                </a>
+            </nav>
+            {% else %}
             <div class="sidebar-header">
                 <a href="{% url 'chat' %}" class="btn btn-new-chat">
                     <i class="bi bi-plus-lg me-2"></i> Novo Agendamento
@@ -35,7 +71,14 @@
                 <a href="{% url 'calendario' %}" class="nav-item {% if request.resolver_match.url_name == 'calendario' %}active{% endif %}">
                     <i class="bi bi-calendar3 me-2"></i> Meus Agendamentos
                 </a>
+                <button type="button" class="nav-item border-0 bg-transparent w-100 text-start" data-bs-toggle="modal"
+                        data-bs-target="#modal-notificacoes" hx-get="{% url 'notificacoes_pendentes' %}" hx-target="#conteudo-notificacoes">
+                    <i class="bi bi-bell me-2"></i> Notificações
+                    <span class="ms-auto" hx-get="{% url 'notificacoes_contagem' %}" hx-target="this"
+                          hx-trigger="load, every 30s, notificacoes-atualizadas from:body"></span>
+                </button>
             </nav>
+            {% endif %}
 
             <div class="sidebar-footer">
                 <div class="user-profile" @click="openDropdown = !openDropdown">
@@ -43,8 +86,8 @@
                         <i class="bi bi-person-fill"></i>
                     </div>
                     <div class="user-info">
-                        <span class="user-name">{{ request.user.username|default:"Paciente" }}</span>
-                        <span class="user-role">Usuário</span>
+                        <span class="user-name">{{ request.user.first_name|default:request.user.username|default:"Paciente" }}</span>
+                        <span class="user-role">{{ papel_rotulo }}</span>
                     </div>
                     <i class="bi bi-three-dots-vertical ms-auto"></i>
                 </div>
@@ -66,6 +109,18 @@
                 </div>
             </div>
         </aside>
+        <div class="modal fade" id="modal-notificacoes" tabindex="-1" aria-labelledby="titulo-notificacoes" aria-hidden="true">
+            <div class="modal-dialog modal-dialog-scrollable">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title" id="titulo-notificacoes"><i class="bi bi-bell me-2"></i>Notificações</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
+                    </div>
+                    <div class="modal-body" id="conteudo-notificacoes"><p class="text-secondary mb-0">Carregando…</p></div>
+                </div>
+            </div>
+        </div>
+        {% endblock %}
 
         <!-- Área Principal de Conteúdo -->
         <main class="main-content">

@@ -1,0 +1,60 @@
+{% extends 'base.html' %}
+
+{% block title %}Minha agenda - Assistente Clínico{% endblock %}
+
+{% block content %}
+<div class="container py-4 calendario">
+    <div class="d-flex align-items-center flex-wrap gap-2 mb-4">
+        <h3 class="mb-0"><i class="bi bi-calendar-day me-2"></i> Minha agenda</h3>
+        <div class="ms-auto d-flex align-items-center gap-2">
+            <a href="?data={{ anterior|date:'Y-m-d' }}" class="btn btn-outline-secondary" title="Dia anterior"><i class="bi bi-chevron-left"></i></a>
+            <form method="get" class="d-flex">
+                <input type="date" name="data" value="{{ dia|date:'Y-m-d' }}" class="form-control" onchange="this.form.submit()" aria-label="Escolher dia">
+            </form>
+            <a href="?data={{ seguinte|date:'Y-m-d' }}" class="btn btn-outline-secondary" title="Próximo dia"><i class="bi bi-chevron-right"></i></a>
+            {% if not e_hoje %}<a href="{% url 'agenda_medica' %}" class="btn btn-outline-secondary">Hoje</a>{% endif %}
+        </div>
+    </div>
+
+    <p class="text-secondary">{{ dia|date:"l, d \d\e F \d\e Y"|capfirst }}</p>
+
+    {% if erro %}
+        <div class="alert alert-warning" role="alert">{{ erro }}</div>
+    {% elif sem_ficha %}
+        <div class="alert alert-secondary" role="alert">
+            Sua conta ainda não está vinculada a uma ficha de médico (CRM e especialidade), por isso não há agenda própria.
+            Peça à recepção para refazer seu cadastro com a ficha profissional. Enquanto isso, a agenda geral fica em
+            <a href="{% url 'consultas' %}">Consultas</a>.
+        </div>
+    {% else %}
+        <div class="card border-secondary">
+            <div class="card-body p-0">
+                {% if consultas %}
+                    <table class="table table-hover mb-0 align-middle">
+                        <thead>
+                            <tr><th>Horário</th><th>Paciente</th><th>Situação</th><th>Observação</th><th></th></tr>
+                        </thead>
+                        <tbody>
+                            {% for consulta in consultas %}
+                                <tr>
+                                    <td>{{ consulta.hora_inicio }} – {{ consulta.hora_fim }}</td>
+                                    <td>{{ consulta.paciente_nome }}</td>
+                                    <td>{% include 'equipe/partials/situacao.html' with status=consulta.status %}{% if consulta.solicitacao_pendente %} <span class="badge text-bg-warning">Aguardando paciente</span>{% endif %}</td>
+                                    <td class="text-secondary">{{ consulta.observacao|default:"" }}</td>
+                                    <td class="text-end">
+                                        <a href="{% url 'editar_consulta' consulta.id %}" class="btn btn-sm btn-outline-secondary">
+                                            <i class="bi bi-pencil-square me-1"></i>Gerenciar
+                                        </a>
+                                    </td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                {% else %}
+                    <p class="text-secondary p-3 mb-0">Nenhuma consulta neste dia.</p>
+                {% endif %}
+            </div>
+        </div>
+    {% endif %}
+</div>
+{% endblock %}

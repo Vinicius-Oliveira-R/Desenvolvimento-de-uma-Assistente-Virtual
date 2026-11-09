@@ -10,6 +10,7 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/6.1/ref/settings/
 """
 
+import os
 from pathlib import Path
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -20,12 +21,12 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # See https://docs.djangoproject.com/en/6.1/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-^8o@g2svm1pttlm-y=y7dd65v^tsqb9)%l2avjkl)fob$zrn8#'
+SECRET_KEY = os.environ.get('DJANGO_SECRET_KEY', 'django-insecure-^8o@g2svm1pttlm-y=y7dd65v^tsqb9)%l2avjkl)fob$zrn8#')
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = os.environ.get('DJANGO_DEBUG', 'true').lower() == 'true'
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = os.environ.get('DJANGO_ALLOWED_HOSTS', '127.0.0.1,localhost').split(',')
 
 
 # Application definition
@@ -70,6 +71,7 @@ TEMPLATES = [
                 'django.template.context_processors.request',
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
+                'assistant.context_processors.perfil',
             ],
         },
     },
@@ -84,7 +86,7 @@ WSGI_APPLICATION = 'setup.wsgi.application'
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+        'NAME': os.environ.get('DJANGO_SQLITE_PATH', BASE_DIR / 'db.sqlite3'),
     }
 }
 
@@ -111,9 +113,9 @@ AUTH_PASSWORD_VALIDATORS = [
 # Internationalization
 # https://docs.djangoproject.com/en/6.1/topics/i18n/
 
-LANGUAGE_CODE = 'en-us'
+LANGUAGE_CODE = 'pt-br'
 
-TIME_ZONE = 'UTC'
+TIME_ZONE = 'America/Sao_Paulo'
 
 USE_I18N = True
 
@@ -130,9 +132,17 @@ STATICFILES_DIRS = [
 ]
 
 # Redirecionamentos de Autenticação
-LOGIN_REDIRECT_URL = 'chat'
+LOGIN_REDIRECT_URL = 'inicio'
 LOGIN_URL = 'login'
 LOGOUT_REDIRECT_URL = 'login'
+
+AUTHENTICATION_BACKENDS = ['assistant.backends.FastAPIAuthBackend']
+SESSION_COOKIE_AGE = 60 * 60
+
+# Integração com a API FastAPI
+FASTAPI_BASE_URL = os.environ.get('FASTAPI_BASE_URL', 'http://127.0.0.1:8000/api')
+FASTAPI_TIMEOUT = float(os.environ.get('FASTAPI_TIMEOUT', '10'))
+ASSISTENTE_EXIBIR_DIAGNOSTICO = DEBUG
 
 # Email
 # https://docs.djangoproject.com/en/6.1/topics/email/#topic-email-configuration

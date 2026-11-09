@@ -1,0 +1,43 @@
+{% extends 'base.html' %}
+{% load crispy_forms_tags %}
+
+{% block title %}Liberar horários - Assistente Clínico{% endblock %}
+
+{% block content %}
+<div class="container py-4 calendario" style="max-width: 760px;">
+    <h3 class="mb-2"><i class="bi bi-clock-history me-2"></i> Liberar horários</h3>
+    <p class="text-secondary mb-4">
+        Abre a agenda de um médico para que pacientes e recepção possam marcar consultas.
+        Horários que já existem são mantidos como estão.
+    </p>
+
+    {% include 'equipe/partials/mensagens.html' %}
+
+    {% if erro %}
+        <div class="alert alert-warning" role="alert">{{ erro }}</div>
+    {% else %}
+        <form method="post" novalidate class="card border-secondary p-4">
+            {% csrf_token %}
+            {% for erro_geral in form.non_field_errors %}
+                <div class="alert alert-danger" role="alert">{{ erro_geral }}</div>
+            {% endfor %}
+
+            {{ form.medico_id|as_crispy_field }}
+            <div class="row">
+                <div class="col-md-6">{{ form.data_inicio|as_crispy_field }}</div>
+                <div class="col-md-6">{{ form.data_fim|as_crispy_field }}</div>
+            </div>
+            {{ form.dias_semana|as_crispy_field }}
+            <div class="row">
+                <div class="col-md-4">{{ form.hora_inicio|as_crispy_field }}</div>
+                <div class="col-md-4">{{ form.hora_fim|as_crispy_field }}</div>
+                <div class="col-md-4">{{ form.duracao_minutos|as_crispy_field }}</div>
+            </div>
+
+            <button type="submit" class="btn btn-accent mt-2">
+                <i class="bi bi-unlock me-2"></i>Liberar horários
+            </button>
+        </form>
+    {% endif %}
+</div>
+{% endblock %}

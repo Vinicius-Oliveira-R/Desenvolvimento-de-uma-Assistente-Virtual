@@ -1,11 +1,34 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from enum import StrEnum
 
-from sqlalchemy import String
+from sqlalchemy import Enum, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.backend.core.database import Base
+
+
+class PapelUsuario(StrEnum):
+    GESTOR = "gestor"
+    ADMIN = "admin"
+    MEDICO = "medico"
+    PACIENTE = "paciente"
+
+    def pode_cadastrar(self, papel: PapelUsuario) -> bool:
+        return papel in PAPEIS_CADASTRAVEIS[self]
+
+    def papeis_cadastraveis(self) -> list[PapelUsuario]:
+        return [papel for papel in PapelUsuario if self.pode_cadastrar(papel)]
+
+
+# O gestor não aparece como alvo em nenhum perfil: ninguém o cadastra pela API, nem outro gestor.
+PAPEIS_CADASTRAVEIS: dict[PapelUsuario, frozenset[PapelUsuario]] = {
+    PapelUsuario.GESTOR: frozenset({PapelUsuario.MEDICO, PapelUsuario.ADMIN}),
+    PapelUsuario.MEDICO: frozenset({PapelUsuario.MEDICO, PapelUsuario.ADMIN, PapelUsuario.PACIENTE}),
+    PapelUsuario.ADMIN: frozenset({PapelUsuario.ADMIN, PapelUsuario.PACIENTE}),
+    PapelUsuario.PACIENTE: frozenset(),
+}
 
 
 class Usuario(Base):
@@ -15,7 +38,18 @@ class Usuario(Base):
     nome: Mapped[str] = mapped_column(String(150), nullable=False)
     email: Mapped[str] = mapped_column(String(150), unique=True, index=True, nullable=False)
     senha_hash: Mapped[str] = mapped_column(String(255), nullable=False)
-    tipo: Mapped[str] = mapped_column(String(50), nullable=False, default="paciente")
+    papel: Mapped[PapelUsuario] = mapped_column(
+        Enum(
+            PapelUsuario,
+            name="papelusuario",
+            native_enum=False,
+            create_constraint=True,
+            length=20,
+            values_callable=lambda papeis: [papel.value for papel in papeis],
+        ),
+        nullable=False,
+        default=PapelUsuario.PACIENTE,
+    )
     data_criacao: Mapped[str] = mapped_column(
         String(30),
         nullable=False,
@@ -23,3 +57,4 @@ class Usuario(Base):
     )
 
     paciente: Mapped["Paciente | None"] = relationship(back_populates="usuario")
+    medico: Mapped["Medico | None"] = relationship(back_populates="usuario")

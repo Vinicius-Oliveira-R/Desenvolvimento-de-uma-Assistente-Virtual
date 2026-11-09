@@ -1,0 +1,36 @@
+{% extends 'base.html' %}
+{% load crispy_forms_tags %}
+
+{% block title %}Nova consulta - Assistente Clínico{% endblock %}
+
+{% block content %}
+<div class="container py-4 calendario" style="max-width: 760px;">
+    <h3 class="mb-4">
+        <a href="{% url 'consultas' %}" class="text-secondary me-2" title="Voltar"><i class="bi bi-arrow-left"></i></a>
+        Nova consulta
+    </h3>
+
+    {% if erro %}
+        <div class="alert alert-warning" role="alert">{{ erro }}</div>
+    {% else %}
+        <form method="post" novalidate class="card border-secondary p-4">
+            {% csrf_token %}
+            {% for erro_geral in form.non_field_errors %}
+                <div class="alert alert-danger" role="alert">{{ erro_geral }}</div>
+            {% endfor %}
+
+            {{ form.paciente_id|as_crispy_field }}
+            <div class="row">
+                <div class="col-md-7">{{ form.medico_id|as_crispy_field }}</div>
+                <div class="col-md-5">{{ form.data|as_crispy_field }}</div>
+            </div>
+            {{ form.horario_id|as_crispy_field }}
+            {{ form.observacao|as_crispy_field }}
+
+            <button type="submit" class="btn btn-accent mt-2">
+                <i class="bi bi-calendar-plus me-2"></i>Agendar consulta
+            </button>
+        </form>
+    {% endif %}
+</div>
+{% endblock %}

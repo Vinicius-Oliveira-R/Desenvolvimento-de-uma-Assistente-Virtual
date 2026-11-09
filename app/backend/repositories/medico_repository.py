@@ -18,3 +18,6 @@ class MedicoRepository:
 
     def get_by_id(self, medico_id: int) -> Medico | None:
         return self.db.query(Medico).filter(Medico.id == medico_id).first()
+
+    def get_by_crm(self, crm: str) -> Medico | None:
+        return self.db.query(Medico).filter(Medico.crm == crm).first()

@@ -1,74 +1,30 @@
-import os
-
-os.environ["DATABASE_URL"] = "sqlite:///./test_assistente_clinico.db"
-
-from fastapi.testclient import TestClient
-
-from app.backend.core.database import Base, engine
-from app.backend.main import app
-
-client = TestClient(app)
+from app.backend.tests.helpers import SENHA_PADRAO, ClinicaApi
 
 
-def setup_function() -> None:
-    Base.metadata.drop_all(bind=engine)
-    Base.metadata.create_all(bind=engine)
+def test_register_and_login(api: ClinicaApi) -> None:
+    usuario = api.cadastrar_usuario("Ana", "ana@email.com")
+    assert usuario["email"] == "ana@email.com"
+    assert usuario["papel"] == "paciente"
+    assert "token" not in usuario
 
-
-def test_register_and_login() -> None:
-    payload = {"nome": "Ana", "email": "ana@email.com", "senha": "senha123", "tipo": "paciente"}
-    response = client.post("/auth/register", json=payload)
-    assert response.status_code == 201, response.text
-    data = response.json()
-    assert data["email"] == payload["email"]
-    assert "token" in data
-
-    login_response = client.post("/auth/login", json={"email": payload["email"], "senha": payload["senha"]})
+    login_response = api.client.post("/api/auth/login", json={"email": "ana@email.com", "senha": SENHA_PADRAO})
     assert login_response.status_code == 200, login_response.text
-    assert "token" in login_response.json()
+    assert login_response.json()["token"]
+    assert login_response.json()["papel"] == "paciente"
 
 
-def test_patient_and_doctor_flow() -> None:
-    register = client.post(
-        "/auth/register",
-        json={"nome": "Paciente Teste", "email": "paciente@email.com", "senha": "senha123", "tipo": "paciente"},
-    )
-    token = register.json()["token"]
-    headers = {"Authorization": f"Bearer {token}"}
+def test_patient_and_doctor_flow(api: ClinicaApi) -> None:
+    _, paciente_id = api.cadastrar_paciente("Paciente Teste", "paciente@email.com", "12345678900")
+    medico_id = api.cadastrar_medico("Dr. João", "CRM-SP-1234", "Cardiologia")
+    horario_id = api.cadastrar_horario(medico_id, "2026-10-10", "09:00")
 
-    patient = client.post(
-        "/pacientes",
-        headers=headers,
+    consulta = api.client.post(
+        "/api/consultas",
+        headers=api.admin,
         json={
-            "nome": "Paciente Teste",
-            "cpf": "12345678900",
-            "data_nascimento": "1990-01-10",
-            "telefone": "11999999999",
-        },
-    )
-    assert patient.status_code == 201, patient.text
-
-    doctor = client.post(
-        "/medicos",
-        headers=headers,
-        json={"nome": "Dr. João", "crm": "CRM-SP-1234", "especialidade": "Cardiologia"},
-    )
-    assert doctor.status_code == 201, doctor.text
-
-    horario = client.post(
-        "/horarios",
-        headers=headers,
-        json={"medico_id": doctor.json()["id"], "data": "2026-10-10", "hora_inicio": "09:00", "hora_fim": "09:30"},
-    )
-    assert horario.status_code == 201, horario.text
-
-    consulta = client.post(
-        "/consultas",
-        headers=headers,
-        json={
-            "paciente_id": patient.json()["id"],
-            "medico_id": doctor.json()["id"],
-            "horario_id": horario.json()["id"],
+            "paciente_id": paciente_id,
+            "medico_id": medico_id,
+            "horario_id": horario_id,
             "data": "2026-10-10",
             "observacao": "Consulta inicial",
         },
@@ -77,148 +33,70 @@ def test_patient_and_doctor_flow() -> None:
     assert consulta.json()["status"] == "agendada"
 
 
-def test_consultation_conflict() -> None:
-    register = client.post(
-        "/auth/register",
-        json={"nome": "Paciente Conflito", "email": "paciente2@email.com", "senha": "senha123", "tipo": "paciente"},
-    )
-    token = register.json()["token"]
-    headers = {"Authorization": f"Bearer {token}"}
+def test_consultation_conflict(api: ClinicaApi) -> None:
+    _, paciente_id = api.cadastrar_paciente("Paciente Conflito", "paciente2@email.com", "11111111111")
+    medico_id = api.cadastrar_medico("Dra. Maria", "CRM-SP-4321", "Neurologia")
+    horario_id = api.cadastrar_horario(medico_id, "2026-11-05", "14:00")
+    consulta = {"paciente_id": paciente_id, "medico_id": medico_id, "horario_id": horario_id, "data": "2026-11-05"}
 
-    patient = client.post(
-        "/pacientes",
-        headers=headers,
-        json={"nome": "Paciente Conflito", "cpf": "11111111111", "data_nascimento": "1985-02-02", "telefone": "11999999998"},
-    )
-    doctor = client.post(
-        "/medicos",
-        headers=headers,
-        json={"nome": "Dra. Maria", "crm": "CRM-SP-4321", "especialidade": "Neurologia"},
-    )
-    slot = client.post(
-        "/horarios",
-        headers=headers,
-        json={"medico_id": doctor.json()["id"], "data": "2026-11-05", "hora_inicio": "14:00", "hora_fim": "14:30"},
-    )
-
-    first = client.post(
-        "/consultas",
-        headers=headers,
-        json={
-            "paciente_id": patient.json()["id"],
-            "medico_id": doctor.json()["id"],
-            "horario_id": slot.json()["id"],
-            "data": "2026-11-05",
-            "observacao": "Primeira",
-        },
-    )
+    first = api.client.post("/api/consultas", headers=api.admin, json={**consulta, "observacao": "Primeira"})
     assert first.status_code == 201, first.text
 
-    second = client.post(
-        "/consultas",
-        headers=headers,
-        json={
-            "paciente_id": patient.json()["id"],
-            "medico_id": doctor.json()["id"],
-            "horario_id": slot.json()["id"],
-            "data": "2026-11-05",
-            "observacao": "Segunda",
-        },
-    )
+    second = api.client.post("/api/consultas", headers=api.admin, json={**consulta, "observacao": "Segunda"})
     assert second.status_code == 409, second.text
 
 
-def test_cancel_and_update_require_confirmation() -> None:
-    register = client.post(
-        "/auth/register",
-        json={"nome": "Paciente Confirmação", "email": "confirmacao@email.com", "senha": "senha123", "tipo": "paciente"},
-    )
-    token = register.json()["token"]
-    headers = {"Authorization": f"Bearer {token}"}
+def test_cancel_and_update_require_confirmation(api: ClinicaApi) -> None:
+    _, paciente_id = api.cadastrar_paciente("Paciente Confirmação", "confirmacao@email.com", "22222222222")
+    medico_id = api.cadastrar_medico("Dr. Carlos", "CRM-SP-5555", "Dermatologia")
+    horario_id = api.cadastrar_horario(medico_id, "2026-12-15", "10:00")
+    consulta = {"paciente_id": paciente_id, "medico_id": medico_id, "horario_id": horario_id, "data": "2026-12-15"}
 
-    patient = client.post(
-        "/pacientes",
-        headers=headers,
-        json={"nome": "Paciente Confirmação", "cpf": "22222222222", "data_nascimento": "1987-07-12", "telefone": "11998989898"},
+    criada = api.client.post(
+        "/api/consultas", headers=api.admin, json={**consulta, "observacao": "Consulta para confirmação"}
     )
-    doctor = client.post(
-        "/medicos",
-        headers=headers,
-        json={"nome": "Dr. Carlos", "crm": "CRM-SP-5555", "especialidade": "Dermatologia"},
-    )
-    slot = client.post(
-        "/horarios",
-        headers=headers,
-        json={"medico_id": doctor.json()["id"], "data": "2026-12-15", "hora_inicio": "10:00", "hora_fim": "10:30"},
-    )
-    consulta = client.post(
-        "/consultas",
-        headers=headers,
-        json={
-            "paciente_id": patient.json()["id"],
-            "medico_id": doctor.json()["id"],
-            "horario_id": slot.json()["id"],
-            "data": "2026-12-15",
-            "observacao": "Consulta para confirmação",
-        },
-    )
-    consulta_id = consulta.json()["id"]
+    consulta_id = criada.json()["id"]
 
-    unconfirmed_cancel = client.request("DELETE", f"/consultas/{consulta_id}", json={"confirmado": False})
+    unconfirmed_cancel = api.client.request(
+        "DELETE", f"/api/consultas/{consulta_id}", headers=api.admin, json={"confirmado": False}
+    )
     assert unconfirmed_cancel.status_code == 400, unconfirmed_cancel.text
 
-    confirmed_cancel = client.request("DELETE", f"/consultas/{consulta_id}", json={"confirmado": True})
+    confirmed_cancel = api.client.request(
+        "DELETE", f"/api/consultas/{consulta_id}", headers=api.admin, json={"confirmado": True}
+    )
     assert confirmed_cancel.status_code == 200, confirmed_cancel.text
     assert confirmed_cancel.json()["status"] == "cancelada"
 
-    new_consultation = client.post(
-        "/consultas",
-        headers=headers,
-        json={
-            "paciente_id": patient.json()["id"],
-            "medico_id": doctor.json()["id"],
-            "horario_id": slot.json()["id"],
-            "data": "2026-12-15",
-            "observacao": "Nova consulta",
-        },
+    new_consultation = api.client.post(
+        "/api/consultas", headers=api.admin, json={**consulta, "observacao": "Nova consulta"}
     )
     assert new_consultation.status_code == 201, new_consultation.text
     new_id = new_consultation.json()["id"]
 
-    unconfirmed_update = client.put(f"/consultas/{new_id}", json={"observacao": "Atualizada sem confirmação", "confirmado": False})
+    unconfirmed_update = api.client.put(
+        f"/api/consultas/{new_id}",
+        headers=api.admin,
+        json={"observacao": "Atualizada sem confirmação", "confirmado": False},
+    )
     assert unconfirmed_update.status_code == 400, unconfirmed_update.text
 
-    confirmed_update = client.put(f"/consultas/{new_id}", json={"observacao": "Atualizada com confirmação", "confirmado": True})
+    confirmed_update = api.client.put(
+        f"/api/consultas/{new_id}",
+        headers=api.admin,
+        json={"observacao": "Atualizada com confirmação", "confirmado": True},
+    )
     assert confirmed_update.status_code == 200, confirmed_update.text
     assert confirmed_update.json()["observacao"] == "Atualizada com confirmação"
 
 
-def test_assistant_understands_schedule_request() -> None:
-    register = client.post(
-        "/auth/register",
-        json={"nome": "Atendente", "email": "atendente@email.com", "senha": "senha123", "tipo": "paciente"},
-    )
-    token = register.json()["token"]
-    headers = {"Authorization": f"Bearer {token}"}
+def test_assistant_understands_schedule_request(api: ClinicaApi) -> None:
+    medico_id = api.cadastrar_medico("Dr. João", "CRM-SP-7777", "Cardiologia")
+    horario_id = api.cadastrar_horario(medico_id, "2026-10-10", "09:00")
+    api.cadastrar_paciente("Paciente IA", "ia@email.com", "33333333333")
 
-    doctor = client.post(
-        "/medicos",
-        headers=headers,
-        json={"nome": "Dr. João", "crm": "CRM-SP-7777", "especialidade": "Cardiologia"},
-    )
-    slot = client.post(
-        "/horarios",
-        headers=headers,
-        json={"medico_id": doctor.json()["id"], "data": "2026-10-10", "hora_inicio": "09:00", "hora_fim": "09:30"},
-    )
-    patient = client.post(
-        "/pacientes",
-        headers=headers,
-        json={"nome": "Paciente IA", "cpf": "33333333333", "data_nascimento": "1991-03-03", "telefone": "11988887777"},
-    )
-
-    response = client.post(
-        "/assistant/interpret",
+    response = api.client.post(
+        "/api/assistant/interpret",
         json={"mensagem": "Quero agendar uma consulta com Dr. João para 2026-10-10 às 09:00 para o paciente Paciente IA"},
     )
 
@@ -229,78 +107,35 @@ def test_assistant_understands_schedule_request() -> None:
     assert payload["data"] == "2026-10-10"
     assert payload["hora"] == "09:00"
     assert payload["status"] == "slot_disponivel"
-    assert payload["slot_id"] == slot.json()["id"]
+    assert payload["slot_id"] == horario_id
 
 
-def test_assistant_can_create_consultation_from_message() -> None:
-    register = client.post(
-        "/auth/register",
-        json={"nome": "Recepcionista", "email": "recep@email.com", "senha": "senha123", "tipo": "paciente"},
-    )
-    token = register.json()["token"]
-    headers = {"Authorization": f"Bearer {token}"}
+def test_assistant_can_create_consultation_from_message(api: ClinicaApi) -> None:
+    medico_id = api.cadastrar_medico("Dra. Ana", "CRM-SP-8888", "Pediatria")
+    horario_id = api.cadastrar_horario(medico_id, "2026-11-20", "15:00")
+    api.cadastrar_paciente("Maria Souza", "maria@email.com", "44444444444")
 
-    doctor = client.post(
-        "/medicos",
-        headers=headers,
-        json={"nome": "Dra. Ana", "crm": "CRM-SP-8888", "especialidade": "Pediatria"},
-    )
-    slot = client.post(
-        "/horarios",
-        headers=headers,
-        json={"medico_id": doctor.json()["id"], "data": "2026-11-20", "hora_inicio": "15:00", "hora_fim": "15:30"},
-    )
-    client.post(
-        "/pacientes",
-        headers=headers,
-        json={"nome": "Maria Souza", "cpf": "44444444444", "data_nascimento": "1992-05-11", "telefone": "11977776666"},
-    )
-
-    response = client.post(
-        "/assistant/agendar",
+    response = api.client.post(
+        "/api/assistant/agendar",
         json={"mensagem": "Agende uma consulta com Dra. Ana para 2026-11-20 às 15:00 para Maria Souza"},
     )
 
     assert response.status_code == 201, response.text
     payload = response.json()
     assert payload["status"] == "agendada"
-    assert payload["medico_id"] == doctor.json()["id"]
-    assert payload["horario_id"] == slot.json()["id"]
+    assert payload["medico_id"] == medico_id
+    assert payload["horario_id"] == horario_id
     assert payload["observacao"] == "Agendamento realizado pelo assistente"
 
 
-def test_assistant_recommends_best_slot() -> None:
-    register = client.post(
-        "/auth/register",
-        json={"nome": "Recepcionista", "email": "recomendacao@email.com", "senha": "senha123", "tipo": "paciente"},
-    )
-    token = register.json()["token"]
-    headers = {"Authorization": f"Bearer {token}"}
+def test_assistant_recommends_best_slot(api: ClinicaApi) -> None:
+    cardiologista = api.cadastrar_medico("Dr. Carlos", "CRM-SP-9000", "Cardiologia")
+    api.cadastrar_horario(cardiologista, "2026-12-02", "08:30")
+    neurologista = api.cadastrar_medico("Dra. Fernanda", "CRM-SP-9001", "Neurologia")
+    api.cadastrar_horario(neurologista, "2026-12-02", "08:30")
 
-    cardiologist = client.post(
-        "/medicos",
-        headers=headers,
-        json={"nome": "Dr. Carlos", "crm": "CRM-SP-9000", "especialidade": "Cardiologia"},
-    )
-    client.post(
-        "/horarios",
-        headers=headers,
-        json={"medico_id": cardiologist.json()["id"], "data": "2026-12-02", "hora_inicio": "08:30", "hora_fim": "09:00"},
-    )
-
-    neurologist = client.post(
-        "/medicos",
-        headers=headers,
-        json={"nome": "Dra. Fernanda", "crm": "CRM-SP-9001", "especialidade": "Neurologia"},
-    )
-    client.post(
-        "/horarios",
-        headers=headers,
-        json={"medico_id": neurologist.json()["id"], "data": "2026-12-02", "hora_inicio": "08:30", "hora_fim": "09:00"},
-    )
-
-    response = client.post(
-        "/assistant/recomendar",
+    response = api.client.post(
+        "/api/assistant/recomendar",
         json={"mensagem": "Preciso de uma consulta de cardiologia com a maior rapidez possível"},
     )
 

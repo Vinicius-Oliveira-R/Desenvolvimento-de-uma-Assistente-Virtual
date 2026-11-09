@@ -1,0 +1,37 @@
+{% if resultado %}
+    <div class="alert alert-success" role="status">{{ resultado }}</div>
+{% endif %}
+{% if erro %}
+    <div class="alert alert-warning" role="alert">{{ erro }}</div>
+{% endif %}
+
+{% for notificacao in notificacoes %}
+    <div class="border border-secondary rounded p-3 mb-2">
+        <p class="mb-2">
+            {% if notificacao.acao_necessaria %}
+                <i class="bi bi-question-circle text-warning me-2"></i>
+            {% else %}
+                <i class="bi bi-info-circle me-2"></i>
+            {% endif %}
+            {{ notificacao.mensagem }}
+        </p>
+        <div class="d-flex gap-2">
+            <form hx-post="{% url 'responder_notificacao' notificacao.id %}" hx-target="#conteudo-notificacoes">
+                {% csrf_token %}
+                <input type="hidden" name="aceitar" value="sim">
+                <button type="submit" class="btn btn-sm btn-accent">
+                    {% if notificacao.acao_necessaria %}<i class="bi bi-check-lg me-1"></i>Aceitar{% else %}Ciente{% endif %}
+                </button>
+            </form>
+            {% if notificacao.acao_necessaria %}
+                <form hx-post="{% url 'responder_notificacao' notificacao.id %}" hx-target="#conteudo-notificacoes">
+                    {% csrf_token %}
+                    <input type="hidden" name="aceitar" value="nao">
+                    <button type="submit" class="btn btn-sm btn-outline-danger"><i class="bi bi-x-lg me-1"></i>Recusar</button>
+                </form>
+            {% endif %}
+        </div>
+    </div>
+{% empty %}
+    {% if not erro %}<p class="text-secondary mb-0">Nenhuma notificação pendente.</p>{% endif %}
+{% endfor %}

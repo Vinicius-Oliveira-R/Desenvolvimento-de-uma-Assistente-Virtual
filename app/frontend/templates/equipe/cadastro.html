@@ -1,0 +1,55 @@
+{% extends 'base.html' %}
+{% load crispy_forms_tags %}
+
+{% block title %}Cadastrar usuário - Assistente Clínico{% endblock %}
+
+{% block content %}
+<div class="container py-4 calendario" style="max-width: 760px;">
+    <h3 class="mb-4"><i class="bi bi-person-plus me-2"></i> Cadastrar usuário</h3>
+
+    {% for message in messages %}
+        <div class="alert alert-success" role="status"><i class="bi bi-check-circle me-2"></i>{{ message }}</div>
+    {% endfor %}
+
+    {% if erro %}
+        <div class="alert alert-warning" role="alert">{{ erro }}</div>
+    {% elif not form.fields.papel.choices %}
+        <div class="alert alert-secondary" role="alert">Seu perfil não pode cadastrar usuários.</div>
+    {% else %}
+        <form method="post" novalidate class="card border-secondary p-4" x-data="{ papel: '{{ form.papel.value|default_if_none:''|escapejs }}' }">
+            {% csrf_token %}
+            {% for erro_geral in form.non_field_errors %}
+                <div class="alert alert-danger" role="alert">{{ erro_geral }}</div>
+            {% endfor %}
+
+            {{ form.papel|as_crispy_field }}
+            <div class="row">
+                <div class="col-md-6">{{ form.nome|as_crispy_field }}</div>
+                <div class="col-md-6">{{ form.email|as_crispy_field }}</div>
+            </div>
+            {{ form.senha|as_crispy_field }}
+
+            <fieldset x-show="papel === 'paciente'" x-cloak>
+                <legend class="fs-6 text-secondary mt-2">Ficha do paciente</legend>
+                <div class="row">
+                    <div class="col-md-4">{{ form.cpf|as_crispy_field }}</div>
+                    <div class="col-md-4">{{ form.data_nascimento|as_crispy_field }}</div>
+                    <div class="col-md-4">{{ form.telefone|as_crispy_field }}</div>
+                </div>
+            </fieldset>
+
+            <fieldset x-show="papel === 'medico'" x-cloak>
+                <legend class="fs-6 text-secondary mt-2">Ficha profissional do médico</legend>
+                <div class="row">
+                    <div class="col-md-6">{{ form.crm|as_crispy_field }}</div>
+                    <div class="col-md-6">{{ form.especialidade|as_crispy_field }}</div>
+                </div>
+            </fieldset>
+
+            <button type="submit" class="btn btn-accent mt-2">
+                <i class="bi bi-person-check me-2"></i>Cadastrar
+            </button>
+        </form>
+    {% endif %}
+</div>
+{% endblock %}

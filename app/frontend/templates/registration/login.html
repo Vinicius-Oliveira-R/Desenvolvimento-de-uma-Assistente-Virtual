@@ -1,0 +1,24 @@
+{% extends 'base.html' %}
+{% load crispy_forms_tags %}
+
+{% block title %}Entrar - Assistente Clínico{% endblock %}
+
+{% block sidebar %}{% endblock %}
+
+{% block content %}
+<div class="auth-container">
+    <div class="auth-card">
+        <h1 class="h4 mb-1"><i class="bi bi-heart-pulse me-2"></i>Assistente Clínico</h1>
+        <p class="text-secondary mb-4">Pacientes e equipe da clínica: entre com seu e-mail e senha.</p>
+
+        <form method="post" novalidate>
+            {% csrf_token %}
+            {{ form|crispy }}
+            <input type="hidden" name="next" value="{{ next }}">
+            <button type="submit" class="btn btn-accent w-100 mt-2">
+                <i class="bi bi-box-arrow-in-right me-2"></i>Entrar
+            </button>
+        </form>
+    </div>
+</div>
+{% endblock %}

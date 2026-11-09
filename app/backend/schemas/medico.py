@@ -1,10 +1,13 @@
 from pydantic import BaseModel, ConfigDict, Field
 
 
-class MedicoCreate(BaseModel):
-    nome: str = Field(..., min_length=2, max_length=150)
+class FichaMedico(BaseModel):
     crm: str = Field(..., min_length=3, max_length=30)
     especialidade: str = Field(..., min_length=2, max_length=100)
+
+
+class MedicoCreate(FichaMedico):
+    nome: str = Field(..., min_length=2, max_length=150)
 
 
 class MedicoOut(BaseModel):

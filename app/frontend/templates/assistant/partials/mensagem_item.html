@@ -10,6 +10,11 @@
 <div class="chat-bubble assistant">
     <div class="avatar"><i class="bi bi-robot"></i></div>
     <div class="message-content">
-        {{ bot_response }}
+        {{ bot_response|linebreaksbr }}
+        {% if diagnostico %}
+        <div class="message-meta">
+            Perfil: {{ diagnostico.perfil }} · Intenção: {{ diagnostico.intencao }} · Resultado: {{ diagnostico.resultado }}
+        </div>
+        {% endif %}
     </div>
 </div>

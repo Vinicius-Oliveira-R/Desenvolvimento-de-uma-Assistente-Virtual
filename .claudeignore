@@ -1,0 +1,9 @@
+# Arquivos e pastas a serem ignorados pelo Claude
+node_modules/
+build/
+dist/
+package-lock.json
+*.png
+*.jpg
+*.svg
+logs/
