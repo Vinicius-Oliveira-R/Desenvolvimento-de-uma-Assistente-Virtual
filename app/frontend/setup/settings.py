@@ -14,6 +14,9 @@ import os
 from pathlib import Path
 
 from dotenv import load_dotenv
+from django.core.exceptions import ImproperlyConfigured
+
+from setup.runtime_config import ConfigurationError, api_base_url, api_timeout, debug_enabled, postgres_database
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -23,7 +26,10 @@ load_dotenv(BASE_DIR / ".env")
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/6.1/howto/deployment/checklist/
 SECRET_KEY = os.environ["DJANGO_SECRET_KEY"]
-DEBUG = os.environ.get("DJANGO_DEBUG", "false").lower() == "true"
+try:
+    DEBUG = debug_enabled(os.environ.get("DJANGO_DEBUG", "false"))
+except ConfigurationError as exc:
+    raise ImproperlyConfigured(str(exc)) from None
 
 ALLOWED_HOSTS = [
     host.strip()
@@ -41,10 +47,6 @@ SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 SESSION_COOKIE_SECURE = not DEBUG
 CSRF_COOKIE_SECURE = not DEBUG
 
-# SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = os.environ.get('DJANGO_DEBUG', 'true').lower() == 'true'
-
-ALLOWED_HOSTS = os.environ.get('DJANGO_ALLOWED_HOSTS', '127.0.0.1,localhost').split(',')
 
 
 # Application definition
@@ -102,23 +104,10 @@ WSGI_APPLICATION = 'setup.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/6.1/ref/settings/#databases
 
-from urllib.parse import urlparse, unquote
-
-database_url = os.environ["DATABASE_URL"]
-parsed = urlparse(database_url)
-
-DATABASES = {
-    "default": {
-        "ENGINE": "django.db.backends.postgresql",
-        "NAME": unquote(parsed.path.lstrip("/")),
-        "USER": unquote(parsed.username or ""),
-        "PASSWORD": unquote(parsed.password or ""),
-        "HOST": parsed.hostname,
-        "PORT": parsed.port or 5432,
-        "OPTIONS": {"sslmode": "require"},
-        "CONN_MAX_AGE": 0,
-    }
-}
+try:
+    DATABASES = {"default": postgres_database(os.environ.get("DATABASE_URL", ""), debug=DEBUG)}
+except ConfigurationError as exc:
+    raise ImproperlyConfigured(str(exc)) from None
 
 
 # Password validation
@@ -155,7 +144,7 @@ USE_TZ = True
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/6.1/howto/static-files/
 
-STATIC_URL = 'static/'
+STATIC_URL = "/static/"
 STATIC_ROOT = BASE_DIR / "staticfiles" 
 STORAGES = {
     "staticfiles": {
@@ -175,9 +164,28 @@ AUTHENTICATION_BACKENDS = ['assistant.backends.FastAPIAuthBackend']
 SESSION_COOKIE_AGE = 60 * 60
 
 # Integração com a API FastAPI
-FASTAPI_BASE_URL = os.environ.get('FASTAPI_BASE_URL', 'http://127.0.0.1:8000/api')
-FASTAPI_TIMEOUT = float(os.environ.get('FASTAPI_TIMEOUT', '10'))
+try:
+    FASTAPI_BASE_URL = api_base_url(
+        os.environ.get("FASTAPI_BASE_URL", "http://127.0.0.1:8000/api" if DEBUG else ""),
+        debug=DEBUG,
+    )
+    FASTAPI_TIMEOUT = api_timeout(os.environ.get("FASTAPI_TIMEOUT", "30"))
+except ConfigurationError as exc:
+    raise ImproperlyConfigured(str(exc)) from None
 ASSISTENTE_EXIBIR_DIAGNOSTICO = DEBUG
+
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "handlers": {"login_console": {"class": "logging.StreamHandler"}},
+    "loggers": {
+        "assistant.login": {
+            "handlers": ["login_console"],
+            "level": "WARNING",
+            "propagate": False,
+        }
+    },
+}
 
 # Email
 # https://docs.djangoproject.com/en/6.1/topics/email/#topic-email-configuration

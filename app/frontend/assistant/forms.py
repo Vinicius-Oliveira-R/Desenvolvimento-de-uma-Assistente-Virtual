@@ -9,6 +9,7 @@ from django.core.exceptions import ValidationError
 
 from assistant.api_client import ApiError, HorarioLivre, MedicoResumo, PacienteResumo
 from assistant.perfis import PACIENTE, ROTULOS
+from assistant.login_diagnostics import log_login_failure
 
 
 class LoginForm(AuthenticationForm):
@@ -24,6 +25,7 @@ class LoginForm(AuthenticationForm):
         try:
             return super().clean()
         except ApiError as exc:
+            log_login_failure(exc, exc.status_code)
             raise ValidationError(self.error_messages["api_indisponivel"], code="api_indisponivel") from exc
 
 

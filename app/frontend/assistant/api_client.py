@@ -5,6 +5,8 @@ from typing import Any
 import httpx
 from django.conf import settings
 
+from assistant.login_diagnostics import validate_login_payload
+
 
 class ApiError(Exception):
     def __init__(self, mensagem: str, status_code: int | None = None):
@@ -193,8 +195,12 @@ class ClinicaApiClient:
             raise ApiIndisponivelError("API de agendamento indisponível.") from exc
         if resposta.status_code in (401, 422):
             raise CredenciaisInvalidasError("Credenciais inválidas.", resposta.status_code)
-        self._verificar(resposta)
-        dados = resposta.json()
+        if not resposta.is_success:
+            raise ApiIndisponivelError("API de agendamento indisponível.", resposta.status_code)
+        try:
+            dados = validate_login_payload(resposta.json())
+        except ValueError as exc:
+            raise ApiIndisponivelError("Resposta de autenticação inválida.", resposta.status_code) from exc
         return SessaoApi(dados["token"], dados["nome"], dados["email"], dados["papel"])
 
     async def send_message(self, token: str, mensagem: str, contexto: dict[str, Any]) -> RespostaAssistente:
