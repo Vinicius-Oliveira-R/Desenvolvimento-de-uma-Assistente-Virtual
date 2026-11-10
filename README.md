@@ -81,7 +81,7 @@ pip install -r app/backend/requirements.txt -r app/frontend/requirements.txt
 
 Copie `app/backend/.env.example` para `app/backend/.env` e ajuste as variáveis (o arquivo é lido independentemente do diretório de execução).
 
-O front-end lê variáveis de ambiente opcionais: `FASTAPI_BASE_URL` (padrão `http://127.0.0.1:8000/api`), `DJANGO_SECRET_KEY`, `DJANGO_DEBUG` e `DJANGO_ALLOWED_HOSTS`.
+O front-end lê as variáveis de ambiente a partir de `app/frontend/.env` (copie `app/frontend/.env.example` para esse caminho) ou do ambiente do sistema. Configure `DATABASE_URL`, `DJANGO_SECRET_KEY`, `DJANGO_DEBUG` e `DJANGO_ALLOWED_HOSTS`; `FASTAPI_BASE_URL` é opcional e usa `http://127.0.0.1:8000/api` por padrão.
 
 ### Banco já existente
 
