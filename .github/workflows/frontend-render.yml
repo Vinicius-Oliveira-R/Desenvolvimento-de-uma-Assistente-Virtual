@@ -1,0 +1,86 @@
+name: Frontend Render validation
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'app/frontend/**'
+      - '.github/workflows/frontend-render.yml'
+      - 'docs/validacao-frontend-render.md'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: frontend-render-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  frontend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: app/frontend
+    env:
+      DJANGO_SECRET_KEY: ci-only-not-for-production-83109ed6ca047f3423c9f021a17e2202
+      DJANGO_DEBUG: 'false'
+      DJANGO_ALLOWED_HOSTS: localhost,127.0.0.1
+      DJANGO_CSRF_TRUSTED_ORIGINS: ''
+      DATABASE_URL: postgresql://ci:ci@127.0.0.1/frontend_ci?sslmode=require
+      FASTAPI_BASE_URL: https://api.example.test/api
+      FASTAPI_TIMEOUT: '30'
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: '3.12'
+      - name: Install frontend dependencies
+        run: python -m pip install -r requirements.txt
+      - name: Check dependency consistency
+        run: python -m pip check
+      - name: Configuration and HTTP diagnostics tests
+        run: python -m unittest discover -s tests -v
+      - name: Django system checks
+        run: python manage.py check --settings=setup.test_settings
+      - name: Django login and interface regression tests
+        run: python manage.py test assistant --settings=setup.test_settings --verbosity=2
+      - name: Build production static assets without connecting to PostgreSQL
+        run: python manage.py collectstatic --noinput
+
+  postgres:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: ci
+          POSTGRES_PASSWORD: ci
+          POSTGRES_DB: frontend_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    defaults:
+      run:
+        working-directory: app/frontend
+    env:
+      TEST_POSTGRES_URL: postgresql://ci:ci@127.0.0.1:5432/frontend_ci?sslmode=disable
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: '3.12'
+      - name: Install frontend dependencies
+        run: python -m pip install -r requirements.txt
+      - name: Test migrations, login mirror and sessions in disposable PostgreSQL
+        run: python manage.py test assistant --settings=setup.postgres_test_settings --verbosity=2
