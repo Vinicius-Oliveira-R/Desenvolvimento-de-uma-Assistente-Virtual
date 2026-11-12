@@ -26,7 +26,8 @@ jobs:
         with:
           python-version: '3.12'
       - name: Prepare offline test helpers
-        run: python -m pip download --only-binary=:all: --dest test-wheels bcrypt==4.1.2 python-jose==3.3.0
+        run: |
+          python -m pip download --only-binary=:all: --dest test-wheels bcrypt==4.1.2 python-jose==3.3.0
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: scheduling-test-wheels
