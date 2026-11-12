@@ -1,0 +1,41 @@
+name: Backend scheduling validation
+
+on:
+  push:
+    branches: [fix/agendamento-intencoes-e-disponibilidade]
+  pull_request:
+    paths:
+      - 'app/backend/**'
+      - '.github/workflows/backend-agendamento.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  source:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Package tracked source for isolated regression review
+        run: |
+          python - <<'PY'
+          import pathlib, subprocess, zipfile
+          files = subprocess.check_output(['git', 'ls-files', '-z']).decode().split('\0')
+          with zipfile.ZipFile('scheduling-source.zip', 'w', zipfile.ZIP_DEFLATED) as archive:
+              for name in files:
+                  path = pathlib.Path(name)
+                  if not name or path.is_symlink() or not path.is_file():
+                      continue
+                  if any(part.startswith('.') for part in path.parts):
+                      continue
+                  if path.suffix in {'.py', '.html', '.css', '.js', '.csv', '.toml', '.ini'} or path.name == 'requirements.txt':
+                      archive.write(path, name)
+          PY
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: scheduling-review-source
+          path: scheduling-source.zip
+          retention-days: 1
