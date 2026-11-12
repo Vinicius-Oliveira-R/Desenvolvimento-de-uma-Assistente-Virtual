@@ -13,16 +13,16 @@ def _paciente_com_agenda(api: ClinicaApi) -> tuple[dict[str, str], list[int]]:
     return headers, horarios
 
 
-def test_paciente_pede_outro_horario_e_depois_desiste(api: ClinicaApi) -> None:
+
+def test_paciente_lista_vagas_sem_repetir_e_depois_desiste(api: ClinicaApi) -> None:
     headers, horarios = _paciente_com_agenda(api)
     conversa = api.conversa(headers)
-
     primeira = conversa.enviar("Quero agendar cardiologista na próxima semana")
     segunda = conversa.enviar("outro")
     desistencia = conversa.enviar("não")
-
-    assert primeira["contexto"]["acao_pendente"]["horario_id"] == horarios[0]
-    assert segunda["contexto"]["acao_pendente"]["horario_id"] == horarios[1]
+    assert primeira["contexto"]["acao_pendente"]["horarios_oferecidos"] == horarios
+    assert primeira["contexto"]["acao_pendente"]["horario_id"] is None
+    assert segunda["resultado"] == "sem_horarios"
     assert desistencia["intencao"] == "negar"
     assert desistencia["resultado"] == "agendamento_descartado"
     assert desistencia["contexto"]["acao_pendente"] is None
@@ -52,6 +52,7 @@ def test_paciente_lista_proximas_consultas(api: ClinicaApi) -> None:
     headers, _ = _paciente_com_agenda(api)
     conversa = api.conversa(headers)
     conversa.enviar("Quero agendar com Dr. João dia 12/11 às 14h")
+    conversa.enviar("sim")
 
     resposta = conversa.enviar("quais são minhas consultas?")
 
@@ -71,25 +72,25 @@ def _paciente_com_clinico_e_ortopedista(api: ClinicaApi) -> tuple[dict[str, str]
     return headers, horarios
 
 
-def test_pedido_sem_especialidade_recebe_pergunta_simples_que_oferece_clinico_geral(api: ClinicaApi) -> None:
-    headers, _ = _paciente_com_clinico_e_ortopedista(api)
 
+def test_pedido_sem_especialidade_mostra_clinico_geral_sem_pergunta(api: ClinicaApi) -> None:
+    headers, horarios = _paciente_com_clinico_e_ortopedista(api)
     resposta = api.conversa(headers).enviar("marcar consulta")
+    assert resposta["resultado"] == "sugestao_horario"
+    assert resposta["contexto"]["acao_pendente"]["criterios"]["especialidade"] == "Clínica Geral"
+    assert resposta["contexto"]["acao_pendente"]["horario_id"] == horarios["Clínica Geral"]
+    assert "Como você não indicou uma especialidade" in resposta["resposta"]
+    assert api.horario_disponivel(horarios["Clínica Geral"])
 
-    assert resposta["perfil"] == "IDOSO"
-    assert resposta["resultado"] == "falta_especialidade"
-    assert "Se não souber, posso marcar com um clínico geral. Pode ser?" in resposta["resposta"]
-    assert "1." not in resposta["resposta"]
 
 
-def test_paciente_padrao_mantem_a_pergunta_tecnica_de_especialidade(api: ClinicaApi) -> None:
-    headers, _ = _paciente_com_clinico_e_ortopedista(api)
-
+def test_paciente_padrao_tambem_recebe_vagas_de_clinica_geral(api: ClinicaApi) -> None:
+    headers, horarios = _paciente_com_clinico_e_ortopedista(api)
     resposta = api.conversa(headers).enviar("Quero agendar uma consulta para amanhã às 10h, por favor.")
-
-    assert resposta["perfil"] == "PADRAO"
-    assert resposta["resultado"] == "falta_especialidade"
-    assert resposta["resposta"].startswith("Para qual especialidade ou médico deseja agendar?")
+    assert resposta["resultado"] == "sugestao_horario"
+    assert resposta["contexto"]["acao_pendente"]["criterios"]["especialidade"] == "Clínica Geral"
+    assert "alternativas" in resposta["resposta"]
+    assert api.horario_disponivel(horarios["Clínica Geral"])
 
 
 @pytest.mark.parametrize(
@@ -101,7 +102,6 @@ def test_paciente_padrao_mantem_a_pergunta_tecnica_de_especialidade(api: Clinica
         (["marcar consulta", "não sei"], "Clínica Geral"),
         (["marcar consulta", "geral"], "Clínica Geral"),
         (["marcar consulta", "qualquer um"], "Clínica Geral"),
-        (["marcar consulta", "pode ser"], "Clínica Geral"),
         (["marcar consulta", "estou com dor no dedo do pé"], "Clínica Geral"),
         (["marcar consulta", "quero marcar consulta"], "Clínica Geral"),
     ],

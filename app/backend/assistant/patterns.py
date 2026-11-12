@@ -23,6 +23,8 @@ PALAVRAS_FORA_DE_NOME = (
     "dia", "dias", "hoje", "amanha", "depois", "semana", "mes", "proxima", "proximo", "agora", "cedo", "tarde",
     "noite", "manha", "hora", "horas", "h", "feira", "consulta", "consultas", "favor", "sim", "nao", "ja",
     "pode", "quero", "queria", "gostaria", "preciso", "obrigado", "obrigada", "retorno", "exame", "aqui", "la",
+    "atende", "atendem", "atendimento", "disponivel", "disponiveis",
+    "livre", "livres", "quando", "qual", "quais", "tem", "vaga", "vagas",
     *DIAS_DA_SEMANA,
     *(termo for especialidade in CATALOGO for termo in especialidade.termos_tecnicos if " " not in termo),
 )

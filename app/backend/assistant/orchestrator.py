@@ -5,12 +5,15 @@ from sqlalchemy.orm import Session
 
 from app.backend.assistant.dialogue import (
     APRESENTACOES_DE_SOLICITACAO,
-    DialogueManager,
     ResultadoDialogo,
     TipoResultado,
 )
-from app.backend.assistant.nlp import LanguageProcessor, MessageInterpreter, get_language_processor
-from app.backend.assistant.responses import ResponseDecisionTree
+from app.backend.assistant.nlp import LanguageProcessor, get_language_processor
+from app.backend.assistant.scheduling_flow import (
+    SchedulingDialogueManager as DialogueManager,
+    SchedulingMessageInterpreter as MessageInterpreter,
+)
+from app.backend.assistant.scheduling_responses import SchedulingResponseDecisionTree as ResponseDecisionTree
 from app.backend.assistant.temporal import TemporalResolver
 from app.backend.core.clock import Clock
 from app.backend.ml.heuristics import NielsenHeuristicExtractor

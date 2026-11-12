@@ -53,6 +53,8 @@ class AcaoPendente(BaseModel):
     notificacao_id: int | None = None
     criterios: CriteriosAgendamento = Field(default_factory=CriteriosAgendamento)
     recusados: list[int] = Field(default_factory=list)
+    horarios_oferecidos: list[int] = Field(default_factory=list, max_length=6)
+    aguardando_escolha: bool = False
 
 
 class ContextoConversa(BaseModel):

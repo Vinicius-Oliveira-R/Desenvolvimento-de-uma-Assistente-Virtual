@@ -69,7 +69,10 @@ def test_cenario_b_agendamento_completo_e_cancelamento(api: ClinicaApi) -> None:
     horario = api.cadastrar_horario(dra_maria, "2027-10-25", "14:00")
     conversa = api.conversa(headers)
 
-    agendamento = conversa.enviar("Quero agendar consulta com Dra. Maria dia 25/10 às 14h")
+    proposta = conversa.enviar("Quero agendar consulta com Dra. Maria dia 25/10 às 14h")
+    assert proposta["resultado"] == "sugestao_horario"
+    assert api.horario_disponivel(horario)
+    agendamento = conversa.enviar("sim")
 
     assert agendamento["perfil"] == "PADRAO"
     assert agendamento["resultado"] == "consulta_agendada"
@@ -112,12 +115,15 @@ def test_cenario_c_chat_avisa_e_sugere_alternativa_quando_horario_e_tomado(api: 
     ]
     for conversa in conversas:
         sugestao = conversa.enviar("Quero agendar cardiologista na próxima semana")
-        assert sugestao["contexto"]["acao_pendente"]["horario_id"] == disputado
+        assert sugestao["contexto"]["acao_pendente"]["horarios_oferecidos"] == [disputado, alternativa]
+        escolha = conversa.enviar("1")
+        assert escolha["contexto"]["acao_pendente"]["horario_id"] == disputado
+        assert api.horario_disponivel(disputado)
 
     primeira = conversas[0].enviar("sim")
     segunda = conversas[1].enviar("sim")
 
     assert primeira["resultado"] == "consulta_agendada"
     assert segunda["resultado"] == "sugestao_horario"
-    assert segunda["resposta"].startswith(MENSAGEM_RESERVADO)
+    assert "Essa opção não está mais disponível" in segunda["resposta"]
     assert segunda["contexto"]["acao_pendente"]["horario_id"] == alternativa
