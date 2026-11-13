@@ -1,157 +1,146 @@
 # Assistente Clínico
 
-## Descrição
+Protótipo de agendamento administrativo com FastAPI, SQLAlchemy/PostgreSQL,
+Django SSR, HTTPX, HTMX, Alpine.js e Bootstrap. O PLN de intenção utiliza
+spaCy (Matcher/EntityRuler); Random Forest seleciona o estilo de resposta,
+não diagnostica doenças nem comprova idade do paciente.
 
-Protótipo de sistema para agendamento e gestão de consultas clínicas com assistente virtual em linguagem natural, que adapta a linguagem da resposta ao perfil etário inferido do paciente.
+## Revisão da auditoria
 
-## Objetivo
+As correções e sua rastreabilidade estão em
+[docs/auditoria-codigo-20261113.md](docs/auditoria-codigo-20261113.md).
+Este é um protótipo: testes não certificam segurança, adequação clínica,
+acessibilidade, conformidade jurídica ou disponibilidade de produção.
 
-Implementar uma API robusta em Python com FastAPI, banco relacional PostgreSQL e módulos de NLP/ML para apoiar o agendamento de consultas, gestão de disponibilidade e adaptação da comunicação, com um front-end Django (SSR + HTMX).
+**Esta revisão altera o schema. Não publicar sobre banco antigo sem migração.**
+Não executar testes ou seed demonstrativo no Neon de produção. A retirada de
+credenciais padrão do código não redefine contas que já utilizaram esses valores.
 
-## Tecnologias
+## Instalação e configuração
 
-- Python 3.11+
-- Back-end: FastAPI, SQLAlchemy, Pydantic, PostgreSQL, bcrypt, JWT
-- NLP/ML: spaCy (pipeline `pt` com EntityRuler e Matcher), scikit-learn (Random Forest)
-- Front-end: Django, HTMX, Alpine.js, Bootstrap 5, httpx
-- Testes: pytest e Django TestCase
-
-## Arquitetura
-
-```text
-assistente-clinico/
-├── app/
-│   ├── backend/                 # API FastAPI
-│   │   ├── core/                # configuração, banco, segurança, exceções de domínio, relógio
-│   │   ├── models/              # entidades do domínio
-│   │   ├── schemas/             # validação de entrada e saída
-│   │   ├── repositories/        # persistência (inclui SELECT ... FOR UPDATE)
-│   │   ├── services/            # regras de negócio (agendamento atômico, agenda)
-│   │   ├── routers/             # endpoints da API (prefixo /api)
-│   │   ├── assistant/           # NLP com spaCy, diálogo e árvore de decisão das respostas
-│   │   ├── ml/                  # heurísticas de Nielsen, Random Forest e corpus de treino
-│   │   ├── tests/
-│   │   └── seed.py              # dados de demonstração
-│   └── frontend/                # Django (SSR) consumindo a API via httpx
-├── scripts/e2e_smoke.py         # teste E2E com os dois servidores em execução
-└── docs/
-```
-
-Pipeline do assistente (`POST /api/assistant/chat`):
-
-1. **spaCy** extrai intenção (Matcher) e entidades (EntityRuler): especialidade, médico, data, período, hora e turno. Quando o paciente descreve um sintoma ou usa um termo popular ("dor nas costas", "consulta do coração"), a especialidade é inferida pelo dicionário `SINTOMAS_E_TERMOS_COLOQUIAIS`.
-2. **Heurísticas de Nielsen** transformam a mensagem em um vetor numérico (taxa de erros, complexidade, hesitação, vagueza e informalidade).
-3. **Random Forest** prevê o perfil etário (`IDOSO` ou `PADRAO`), suavizado ao longo da conversa. A conversa começa no estilo simplificado e só muda quando há evidência suficiente, porque mensagens curtas pesam pouco.
-4. **Gerenciador de diálogo** agenda, sugere horários, lista ou cancela (cancelamento exige confirmação). A especialidade é perguntada no máximo uma vez: se o paciente não souber ("não sei", "qualquer um"), o agendamento segue com Clínica Geral. Pedidos de remédio, receita ou diagnóstico são recusados, porque o sistema não diagnostica nem prescreve, e viram uma oferta de consulta com Clínica Geral.
-5. **Árvore de decisão** escolhe o estilo da resposta: linguagem simplificada, sem termos técnicos e com passos numerados para `IDOSO`.
-
-## Perfis de acesso (RBAC)
-
-Cada usuário tem um `papel`: `gestor` (responsável pela clínica), `admin` (atendente), `medico` ou `paciente`. O papel é conferido no banco a cada requisição, a partir do usuário identificado pelo token JWT.
-
-| Usuário logado | Cadastra usuários (`POST /api/auth/register`) | Pacientes (`POST`/`GET /api/pacientes`) | Médicos (`POST /api/medicos`) | Consultas (`/api/consultas`) | Horários (`POST /api/horarios` e `/lote`) |
-|---|---|---|---|---|---|
-| `gestor` | médicos e atendentes | não | sim | não | não |
-| `admin` | pacientes e atendentes | sim | não | agenda, remarca e cancela | libera |
-| `medico` | pacientes, atendentes e médicos | sim | sim | agenda, remarca e cancela | libera |
-| `paciente` | não | não | não | só as próprias (`/api/consultas/minhas`) e pelo assistente | não |
-
-Ninguém cadastra um `gestor` pela API, nem outro gestor: essa conta só é criada direto no banco, pelo seed. As permissões de cadastro ficam em um único lugar, `PAPEIS_CADASTRAVEIS` em `app/backend/models/usuario.py`.
-
-O cadastro de um paciente tem duas etapas: `POST /api/auth/register` cria o usuário (com o `papel`) e `POST /api/pacientes` cria a ficha vinculada a ele (`usuario_id`). Sem token, essas rotas respondem 401; com um perfil sem permissão, 403.
-
-## Pedidos de remarcação e cancelamento
-
-Toda remarcação ou cancelamento pede confirmação de quem solicita ("Tem certeza?" na tela da equipe; "sim" no chat do paciente).
-
-- Quando a atendente ou o médico remarca ou cancela, por padrão a consulta **não muda**: o paciente recebe um pedido (`POST /api/consultas/{id}/solicitacoes`) e a alteração só acontece quando ele aceita (`POST /api/notificacoes/{id}/responder`), pela mesma operação atômica com `SELECT ... FOR UPDATE`. Se o paciente já confirmou pessoalmente ou por telefone, a equipe pode marcar "aplicar agora", e o paciente recebe um aviso.
-- O paciente vê os pedidos no sino de notificações (com contador) e também no chat, onde responde com "sim" ou "não".
-- Quando o paciente cancela pelo chat, o médico vinculado à consulta e as atendentes recebem um aviso; quando ele responde a um pedido, quem pediu também é avisado.
-- `GET /api/notificacoes` lista as notificações pendentes do usuário logado.
-
-## Instalação
+Use Python 3.12, conforme a integração contínua, e um ambiente virtual:
 
 ```bash
 python -m venv .venv
-.venv\Scripts\activate
-pip install -r app/backend/requirements.txt -r app/frontend/requirements.txt
+# Windows: .venv\Scripts\activate
+# Linux/macOS: source .venv/bin/activate
+python -m pip install -r app/backend/requirements.txt -r app/frontend/requirements.txt
 ```
 
-## Configuração
+Copie os arquivos `.env.example` para `.env` nas pastas correspondentes.
+O backend requer `DATABASE_URL` e `SECRET_KEY` aleatória exclusiva (>=32 caracteres).
+Não use os segredos dos testes. O exemplo não contém uma chave de produção.
+A validade JWT padrão é 60 minutos, limitada por configuração a 480 minutos.
 
-Copie `app/backend/.env.example` para `app/backend/.env` e ajuste as variáveis (o arquivo é lido independentemente do diretório de execução).
+O frontend utiliza `DATABASE_URL`, `DJANGO_SECRET_KEY`, `DJANGO_DEBUG`,
+`DJANGO_ALLOWED_HOSTS`, `DJANGO_CSRF_TRUSTED_ORIGINS`, `FASTAPI_BASE_URL`
+e `FASTAPI_TIMEOUT`. Em produção a URL da API deve ser HTTPS e terminar em `/api`.
+Consulte também [docs/render-frontend-login.md](docs/render-frontend-login.md).
 
-O front-end lê as variáveis de ambiente a partir de `app/frontend/.env` (copie `app/frontend/.env.example` para esse caminho) ou do ambiente do sistema. Configure `DATABASE_URL`, `DJANGO_SECRET_KEY`, `DJANGO_DEBUG` e `DJANGO_ALLOWED_HOSTS`; `FASTAPI_BASE_URL` é opcional e usa `http://127.0.0.1:8000/api` por padrão.
+## Banco existente e publicação
 
-### Banco já existente
+1. Fazer backup e ensaiar em uma cópia de homologação.
+2. Na raiz, executar `python -m app.backend.migrate --check` (somente leitura).
+3. Resolver conflitos de dados existentes de forma administrativa, sem apagar o histórico.
+4. Executar `python -m app.backend.migrate --apply` com a role proprietária do schema.
+5. Publicar backend e frontend da mesma revisão validada; fazer novo login.
 
-O `create_all` não altera tabelas que já existem. Em um banco SQLite de demonstração, basta apagar o arquivo e rodar o seed. Em um PostgreSQL criado por versões anteriores, execute o SQL do seu caso e depois rode o seed, que cria os usuários de gestor, atendente e médico.
+A migração é aditiva/idempotente e transacional no PostgreSQL: adiciona estado
+ativo, versão do token, contadores de login e proteção de intervalos com `btree_gist`.
+Recusa sobreposições, datas inválidas e e-mails duplicados por caixa; não corrige
+esses dados automaticamente. `create_all` sozinho não atualiza tabelas antigas.
+Tokens anteriores sem versão são rejeitados após esta atualização.
 
-Banco criado antes dos perfis de acesso (a tabela `usuarios` ainda tem a coluna `tipo`):
-
-```sql
-ALTER TABLE consultas DROP CONSTRAINT IF EXISTS uq_consulta_medico_horario_status;
-CREATE UNIQUE INDEX IF NOT EXISTS uq_consulta_horario_ativa ON consultas (horario_id) WHERE status <> 'cancelada';
-ALTER TABLE usuarios RENAME COLUMN tipo TO papel;
-UPDATE usuarios SET papel = 'paciente' WHERE papel NOT IN ('admin', 'medico', 'paciente');
-```
-
-Qualquer banco criado antes do papel `gestor` (inclusive depois do SQL acima):
-
-```sql
-ALTER TABLE usuarios DROP CONSTRAINT IF EXISTS papelusuario;
-ALTER TABLE usuarios ADD CONSTRAINT papelusuario CHECK (papel IN ('gestor', 'admin', 'medico', 'paciente'));
-```
-
-Qualquer banco criado antes do vínculo entre a conta do médico e a ficha dele:
-
-```sql
-ALTER TABLE medicos ADD COLUMN usuario_id INTEGER REFERENCES usuarios(id);
-CREATE UNIQUE INDEX IF NOT EXISTS uq_medicos_usuario_id ON medicos (usuario_id);
-```
-
-## Execução
-
-Na raiz do projeto:
+## Primeiro gestor e recuperação
 
 ```bash
-python -m app.backend.seed                      # dados de demonstração (idempotente)
-uvicorn app.backend.main:app --reload           # API em http://127.0.0.1:8000 (docs em /docs)
+python -m app.backend.create_gestor
+python -m app.backend.create_gestor --redefinir
 ```
 
-Em outro terminal:
+O primeiro comando cria somente o gestor inicial; o segundo redefine a senha de
+um gestor ativo existente e revoga seus tokens. Exigem entrada oculta e confirmação
+do destino; não promovem contas comuns nem criam dados de demonstração.
+O `seed.py` contém exemplos de desenvolvimento: nunca executá-lo em produção.
+
+## Execução local
 
 ```bash
+python -m uvicorn app.backend.main:app --reload
+# Em outro terminal:
 cd app/frontend
 python manage.py migrate
-python manage.py runserver 8001                 # front-end em http://127.0.0.1:8001
+python manage.py runserver 8001
 ```
 
-Usuários de demonstração (senha `senha123`): `gestor@clinica.com` (`gestor`), `recepcao@clinica.com` (atendente, `admin`), `joao.mendes@clinica.com` (`medico`), `lurdes@clinica.com` e `carlos@clinica.com` (`paciente`). Usuários de teste (senha `123456`): `paciente@teste.com`, `medico@teste.com` (Dr. Rafael Teixeira, Neurologia) e `atendente@teste.com`.
+O servidor da API usa `/api` e a documentação fica em `/docs`; saúde em `/health`.
+A interface Django envia operações autenticadas ao backend. Não confundir a senha
+do usuário com o segredo JWT ou a conexão PostgreSQL.
 
-Depois do login, `/inicio/` leva cada perfil à sua área:
+## Perfis e interfaces
 
-| Perfil | Área inicial | O que encontra |
-|---|---|---|
-| paciente | `/` (chat) | assistente e `/calendario/` com as próprias consultas |
-| médico | `/medico/agenda/` | consultas do dia na própria agenda, além de tudo o que a atendente faz |
-| atendente | `/gestao/` | painel com pacientes, cadastro de usuários, `/gestao/consultas/` (agendar, remarcar e cancelar) e `/gestao/horarios/` (liberar horários) |
-| gestor | `/gestao/` | cadastro de médicos e atendentes |
+`admin` é o código do atendente; `gestor` é um papel separado, não um superusuário
+com acesso automático a todas as operações clínicas. Os papéis são lidos no banco
+a cada requisição; contas inativas ou tokens revogados são recusados.
 
-Alterações e cancelamentos de consulta exigem marcar que o paciente confirmou.
+| Papel | Cadastro de usuários | Agenda clínica | Área inicial |
+|---|---|---|---|
+| gestor | médicos e atendentes | não administra consultas pela política atual | `/gestao/` |
+| admin (atendente) | pacientes e atendentes | disponibiliza, agenda, remarca e cancela | `/gestao/` |
+| medico | pacientes, atendentes e médicos | agenda diária e operações da equipe | `/medico/agenda/` |
+| paciente | não | próprias consultas pelo chat e listagem | `/` |
 
-## Testes
+Ninguém cadastra gestor pela API. A matriz está em `models/usuario.py` e deve ser
+revista pela instituição antes do uso real. Não existe validação automática do CRM
+junto ao conselho profissional.
+
+O paciente pode editar e-mail/telefone em `/meus-dados/`; a equipe tem o atalho
+Editar contato na listagem. O gestor administra ativação de profissionais em
+`/gestao/profissionais/`. Desativar um profissional impede novas vagas/reservas,
+mas não apaga consultas existentes nem cancela compromissos silenciosamente.
+
+## Fluxo conversacional
+
+Pedidos genéricos buscam Clínica Geral explicitamente. Uma especialidade ou médico
+já escolhido é preservado. As opções vêm de horários futuros e disponíveis no banco;
+listar não reserva. O paciente escolhe e confirma antes da gravação.
+
+O modo simplificado mostra duas opções por vez e uma instrução; o padrão pode
+mostrar seis. `MAIS HORÁRIOS` consulta as próximas vagas. Os comandos `modo simples`,
+`modo padrão` e `modo automático` mudam apenas a apresentação, sem alterar a agenda.
+
+A remarcação pelo chat seleciona a consulta de origem, o destino e solicita
+confirmação. A transferência é atômica: se o destino ficar ocupado, a consulta
+original é preservada. Pedidos de alteração enviados pela equipe e notificações
+continuam disponíveis, respeitando a confirmação do paciente.
+
+Rotas legadas de leitura exigem autenticação; `/api/assistant/agendar` foi retirada
+do fluxo de escrita e retorna 410 para usuário autenticado. Use `/api/assistant/chat`.
+
+Falhas de treino/predição do classificador retornam ao estilo PADRAO automático,
+sem bloquear a agenda determinística. A espera é limitada e não são criadas threads
+sem limite; preferências explícitas de comunicação continuam sendo respeitadas.
+
+## Testes e evidências
 
 ```bash
-pytest                                          # back-end, incluindo os cenários E2E via API
-cd app/frontend && python manage.py test assistant
-python scripts/e2e_smoke.py                     # E2E real (exige API e front-end em execução)
-python -m app.backend.ml.train                  # validação cruzada do Random Forest
+python -m pytest app/backend/tests -q
+python -m app.backend.ml.train --output evidence/classifier.json
+cd app/frontend
+python manage.py test assistant --settings=setup.test_settings
+python -m unittest discover -s tests -v
 ```
 
-O teste de concorrência em PostgreSQL real roda quando `TEST_POSTGRES_URL` aponta para um banco **descartável** (as tabelas são recriadas):
+Os testes PostgreSQL somente rodam quando `TEST_POSTGRES_URL` aponta para banco
+**descartável**, pois recriam tabelas. Nunca usar a URL Neon real. O CI utiliza
+PostgreSQL 16 temporário e registra JUnit, commit, versões e métricas do modelo.
+O frontend também é testado em SQLite temporário e PostgreSQL descartável.
 
-```bash
-set TEST_POSTGRES_URL=postgresql+psycopg://postgres:postgres@localhost:5432/assistente_clinico_test
-pytest -k postgresql
-```
+O critério do modelo é média de F1 macro >=0,80 em cinco folds estratificados com
+semente 42. O relatório JSON contém distribuição/hash do corpus, parâmetros,
+predições por linha e matriz de confusão. Não representa validação externa ou
+experimento de usabilidade. Não há comprovação de p95 sem ensaio de carga dedicado.
+
+A documentação anterior de concepção permanece em
+[docs/historico/relatorio-tcc-inicial.md](docs/historico/relatorio-tcc-inicial.md),
+identificada como histórica; suas contagens de testes não descrevem esta revisão.

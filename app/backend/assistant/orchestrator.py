@@ -117,7 +117,7 @@ class ChatOrchestrator:
     @staticmethod
     def _vistas(anteriores: list[int], resultado: ResultadoDialogo) -> list[int]:
         if resultado.tipo in APRESENTACOES_DE_SOLICITACAO and resultado.acao_pendente:
-            return [*anteriores, resultado.acao_pendente.notificacao_id]
+            return [*anteriores, resultado.acao_pendente.notificacao_id][-120:]
         return anteriores
 
     def _suavizar(self, atual: float, anterior: float | None, palavras: int) -> float:
