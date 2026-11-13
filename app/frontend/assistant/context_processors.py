@@ -10,5 +10,6 @@ def perfil(request: HttpRequest) -> dict[str, object]:
         "area_da_equipe": papel in EQUIPE,
         "gerencia_consultas": papel in EQUIPE_CLINICA,
         "e_medico": papel == MEDICO,
+        "e_gestor": papel == "gestor",
         "papel_rotulo": ROTULOS.get(papel, "Paciente"),
     }

@@ -41,7 +41,7 @@ class ConciseSimplifiedStyle(SimplifiedStyle):
         TipoResultado.AGRADECIMENTO: "De nada; estou aqui para ajudar com sua agenda.",
         TipoResultado.AJUDA: "Posso ajudar com a agenda.\nEscreva MARCAR CONSULTA, MINHAS CONSULTAS ou CANCELAR CONSULTA.",
         TipoResultado.PACIENTE_NAO_CADASTRADO: "Não encontrei seu cadastro de paciente.\nFale com a recepção para concluir o cadastro.",
-        TipoResultado.SOLICITACAO_REMARCACAO: "{solicitante} pediu para mudar sua consulta de {quando} para {quando_novo}, com {medico_novo}.\nEscreva SIM para aceitar ou NÃO para manter.",
+        TipoResultado.SOLICITACAO_REMARCACAO: "{solicitante} pediu para mudar sua consulta.\nDe {quando} para {quando_novo}, com {medico_novo}.\nEscreva SIM para aceitar ou NÃO para manter.",
         TipoResultado.SOLICITACAO_CANCELAMENTO: "{solicitante} pediu para desmarcar {quando}, com {medico}.\nEscreva SIM para aceitar ou NÃO para manter.",
         TipoResultado.REMARCACAO_ACEITA: "A remarcação foi confirmada.\nConfira a nova data em Meus Agendamentos.",
         TipoResultado.CANCELAMENTO_ACEITO: "Sua consulta foi desmarcada.\nO horário ficou livre.",

@@ -240,7 +240,7 @@ class ClinicaApiClient:
         return await self._requisitar("DELETE", f"/consultas/{consulta_id}", token, json={"confirmado": True})
 
     async def list_doctors(self, token: str) -> list[MedicoResumo]:
-        return [MedicoResumo.from_json(item) for item in await self._requisitar("GET", "/medicos", token)]
+        return [MedicoResumo.from_json(item) for item in await self._requisitar("GET", "/medicos", token) if item.get("ativo", True)]
 
     async def list_free_slots(self, token: str, medico_id: int, data: date) -> list[HorarioLivre]:
         filtros = {"medico_id": medico_id, "data": data.isoformat(), "disponivel": "true"}
@@ -259,6 +259,18 @@ class ClinicaApiClient:
 
     async def request_change(self, token: str, consulta_id: int, pedido: dict[str, Any]) -> dict[str, Any]:
         return await self._requisitar("POST", f"/consultas/{consulta_id}/solicitacoes", token, json=pedido)
+
+    async def get_patient_contact(self, token: str, paciente_id: int | None = None) -> dict[str, Any]:
+        return await self._requisitar("GET", f"/cadastros/pacientes/{paciente_id or 'me'}", token)
+
+    async def update_patient_contact(self, token: str, dados: dict[str, Any], paciente_id: int | None = None) -> dict[str, Any]:
+        return await self._requisitar("PATCH", f"/cadastros/pacientes/{paciente_id or 'me'}", token, json=dados)
+
+    async def list_doctor_records(self, token: str) -> list[dict[str, Any]]:
+        return await self._requisitar("GET", "/medicos", token)
+
+    async def set_doctor_active(self, token: str, medico_id: int, ativo: bool) -> dict[str, Any]:
+        return await self._requisitar("PATCH", f"/cadastros/medicos/{medico_id}", token, json={"ativo": ativo})
 
     async def _requisitar(self, metodo: str, caminho: str, token: str, **opcoes: Any) -> Any:
         try:

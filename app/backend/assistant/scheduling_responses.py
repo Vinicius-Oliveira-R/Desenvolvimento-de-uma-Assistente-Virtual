@@ -53,7 +53,10 @@ class SchedulingResponseDecisionTree(ResponseDecisionTree):
             text = super().respond(perfil, resultado)
             note = resultado.detalhe or ""
             if "não indicou uma especialidade" in note:
-                text = "Como você não indicou uma especialidade, busquei Clínica Geral.\n" + text
+                prefix = "Como você não indicou uma especialidade, busquei Clínica Geral"
+                if "alternativas" in note:
+                    prefix += "; esta opção está fora do período pedido"
+                text = prefix + ".\n" + text
             elif "alternativas" in note:
                 text = "Não há vaga no período pedido; esta é uma alternativa.\n" + text
             elif "não está mais disponível" in note or resultado.aviso:

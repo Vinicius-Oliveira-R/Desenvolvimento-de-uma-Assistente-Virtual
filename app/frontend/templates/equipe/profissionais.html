@@ -1,0 +1,22 @@
+{% extends 'base.html' %}
+{% block title %}Profissionais - Assistente Clínico{% endblock %}
+{% block content %}
+<section class="container py-4 calendario">
+  <h1 class="h3">Profissionais</h1>
+  {% for message in messages %}<div class="alert alert-info" role="status">{{ message }}</div>{% endfor %}
+  <p>A desativação impede novas vagas e reservas; o histórico de consultas é preservado.</p>
+  {% if erro %}<div class="alert alert-warning" role="alert">{{ erro }}</div>{% endif %}
+  <div class="table-responsive"><table class="table">
+    <thead><tr><th>Nome</th><th>CRM</th><th>Especialidade</th><th>Situação</th><th>Ação</th></tr></thead>
+    <tbody>{% for medico in medicos %}<tr>
+      <td>{{ medico.nome }}</td><td>{{ medico.crm }}</td><td>{{ medico.especialidade }}</td>
+      <td>{% if medico.ativo %}Ativo{% else %}Inativo{% endif %}</td>
+      <td><form method="post">{% csrf_token %}
+        <input type="hidden" name="medico_id" value="{{ medico.id }}">
+        <input type="hidden" name="ativo" value="{% if medico.ativo %}false{% else %}true{% endif %}">
+        <button class="btn btn-outline-secondary" type="submit">{% if medico.ativo %}Desativar{% else %}Reativar{% endif %}</button>
+      </form></td>
+    </tr>{% empty %}<tr><td colspan="5">Nenhum profissional cadastrado.</td></tr>{% endfor %}</tbody>
+  </table></div>
+</section>
+{% endblock %}

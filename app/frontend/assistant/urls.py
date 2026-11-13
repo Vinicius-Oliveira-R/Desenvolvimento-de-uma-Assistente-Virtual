@@ -1,4 +1,5 @@
 from django.urls import path
+from .profile_views import ContatoPacienteView, ProfissionaisView
 from .views import (
     CadastroUsuarioView,
     CalendarioView,
@@ -19,6 +20,9 @@ from .views import (
 )
 
 urlpatterns = [
+    path('meus-dados/', ContatoPacienteView.as_view(), name='meus_dados'),
+    path('gestao/pacientes/<int:paciente_id>/contato/', ContatoPacienteView.as_view(), name='editar_contato'),
+    path('gestao/profissionais/', ProfissionaisView.as_view(), name='profissionais'),
     path('', ChatView.as_view(), name='chat'),
     path('calendario/', CalendarioView.as_view(), name='calendario'),
     path('inicio/', DashboardRedirectView.as_view(), name='inicio'),
