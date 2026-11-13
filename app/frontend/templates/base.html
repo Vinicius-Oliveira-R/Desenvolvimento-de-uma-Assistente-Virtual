@@ -68,6 +68,7 @@
                 <a href="{% url 'chat' %}" class="nav-item {% if request.resolver_match.url_name == 'chat' %}active{% endif %}">
                     <i class="bi bi-chat-left-text me-2"></i> Assistente (Chat)
                 </a>
+                <a href="{% url 'meus_dados' %}" class="nav-item"><i class="bi bi-person me-2"></i>Meus dados</a>
                 <a href="{% url 'calendario' %}" class="nav-item {% if request.resolver_match.url_name == 'calendario' %}active{% endif %}">
                     <i class="bi bi-calendar3 me-2"></i> Meus Agendamentos
                 </a>

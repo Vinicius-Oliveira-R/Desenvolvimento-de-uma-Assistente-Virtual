@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from enum import StrEnum
 
-from sqlalchemy import Enum, String
+from sqlalchemy import Boolean, Enum, Integer, String, text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.backend.core.database import Base
@@ -35,6 +35,8 @@ class Usuario(Base):
     __tablename__ = "usuarios"
 
     id: Mapped[int] = mapped_column(primary_key=True, index=True)
+    ativo: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default=text("true"))
+    token_version: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default=text("0"))
     nome: Mapped[str] = mapped_column(String(150), nullable=False)
     email: Mapped[str] = mapped_column(String(150), unique=True, index=True, nullable=False)
     senha_hash: Mapped[str] = mapped_column(String(255), nullable=False)

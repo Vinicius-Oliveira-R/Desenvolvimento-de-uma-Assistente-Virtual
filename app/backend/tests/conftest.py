@@ -7,6 +7,9 @@ from zoneinfo import ZoneInfo
 
 os.environ["DATABASE_URL"] = f"sqlite:///{(Path(tempfile.gettempdir()) / 'assistente_clinico_test.db').as_posix()}"
 
+os.environ["ENVIRONMENT"] = "test"
+os.environ.setdefault("SECRET_KEY", "ci-only-not-for-production-44ca562370d228f2ef6ea0587ce67591")
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -35,3 +38,9 @@ def banco_limpo() -> None:
 @pytest.fixture
 def api(banco_limpo: None) -> ClinicaApi:
     return ClinicaApi(TestClient(app))
+
+
+@pytest.fixture(scope="session", autouse=True)
+def preparar_classificador_para_regressoes():
+    from app.backend.assistant.orchestrator import get_profile_classifier
+    get_profile_classifier()

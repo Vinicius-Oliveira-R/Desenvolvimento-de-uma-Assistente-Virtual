@@ -16,6 +16,9 @@ from app.backend.assistant.scheduling_flow import (
 from app.backend.assistant.scheduling_responses import SchedulingResponseDecisionTree as ResponseDecisionTree
 from app.backend.assistant.temporal import TemporalResolver
 from app.backend.core.clock import Clock
+from app.backend.core.config import get_settings
+from app.backend.core.text import normalizar
+from app.backend.ml.resilience import predictor
 from app.backend.ml.heuristics import NielsenHeuristicExtractor
 from app.backend.ml.profile_classifier import AgeProfileClassifier, PerfilEtario, train_from_corpus
 from app.backend.repositories.paciente_repository import PacienteRepository
@@ -38,7 +41,7 @@ class ChatOrchestrator:
         db: Session,
         clock: Clock,
         processor: LanguageProcessor,
-        classifier: AgeProfileClassifier,
+        classifier: AgeProfileClassifier | None,
         extractor: NielsenHeuristicExtractor | None = None,
         decision_tree: ResponseDecisionTree | None = None,
     ):
@@ -51,17 +54,39 @@ class ChatOrchestrator:
 
     @classmethod
     def build(cls, db: Session, clock: Clock) -> "ChatOrchestrator":
-        return cls(db, clock, get_language_processor(), get_profile_classifier())
+        return cls(db, clock, get_language_processor(), None)
 
     def reply(self, usuario_id: int, requisicao: ChatRequest) -> ChatResponse:
         mensagem = self.interpreter.interpret(requisicao.mensagem)
         vetor = self.extractor.extract(mensagem.doc)
-        probabilidade = self._suavizar(
-            self.classifier.predict(vetor).probabilidade_idoso,
-            requisicao.contexto.probabilidade_idoso,
-            mensagem.total_palavras,
+        settings = get_settings()
+        prediction = predictor.call(
+            lambda: (self.classifier or get_profile_classifier()).predict(vetor),
+            timeout=settings.ml_timeout_seconds, retry_seconds=settings.ml_retry_seconds,
         )
+        degraded = prediction is None
+        probabilidade = 0.0 if degraded else self._suavizar(
+            prediction.probabilidade_idoso, requisicao.contexto.probabilidade_idoso, mensagem.total_palavras,
+        )
+        preference = requisicao.contexto.preferencia_estilo
+        style_commands = {
+            "fale simples": "simplificado", "linguagem simples": "simplificado", "modo simples": "simplificado",
+            "modo padrao": "padrao", "linguagem padrao": "padrao", "modo automatico": "automatico",
+        }
+        requested = style_commands.get(normalizar(requisicao.mensagem))
+        if requested:
+            preference = requested
         perfil = PerfilEtario.IDOSO if probabilidade >= AgeProfileClassifier.LIMIAR_IDOSO else PerfilEtario.PADRAO
+        if preference != "automatico":
+            perfil = PerfilEtario.IDOSO if preference == "simplificado" else PerfilEtario.PADRAO
+        self.dialogue.page_size = 2 if perfil == PerfilEtario.IDOSO else 6
+        if requested:
+            return ChatResponse(
+                resposta="Preferência de linguagem atualizada; nenhuma consulta foi alterada.",
+                perfil=perfil, probabilidade_idoso=probabilidade, intencao="ajuda", resultado="ajuda",
+                entidades={}, heuristicas=HeuristicasOut(**asdict(vetor)), modo_degradado=degraded,
+                contexto=requisicao.contexto.model_copy(update={"preferencia_estilo": preference, "probabilidade_idoso": probabilidade}),
+            )
 
         paciente = self.pacientes.get_by_usuario_id(usuario_id)
         resultado = (
@@ -79,8 +104,10 @@ class ChatOrchestrator:
             resultado=resultado.tipo,
             entidades=mensagem.entidades.as_dict(),
             heuristicas=HeuristicasOut(**asdict(vetor)),
+            modo_degradado=degraded,
             contexto=ContextoConversa(
                 acao_pendente=resultado.acao_pendente,
+                preferencia_estilo=preference,
                 probabilidade_idoso=probabilidade,
                 solicitacoes_vistas=self._vistas(requisicao.contexto.solicitacoes_vistas, resultado),
             ),
@@ -90,7 +117,7 @@ class ChatOrchestrator:
     @staticmethod
     def _vistas(anteriores: list[int], resultado: ResultadoDialogo) -> list[int]:
         if resultado.tipo in APRESENTACOES_DE_SOLICITACAO and resultado.acao_pendente:
-            return [*anteriores, resultado.acao_pendente.notificacao_id]
+            return [*anteriores, resultado.acao_pendente.notificacao_id][-120:]
         return anteriores
 
     def _suavizar(self, atual: float, anterior: float | None, palavras: int) -> float:

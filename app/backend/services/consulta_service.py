@@ -6,7 +6,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.backend.core.exceptions import BusinessRuleError, ConflictError, HorarioIndisponivelError, NotFoundError
-from app.backend.models import Consulta, Horario, Medico, Paciente, StatusConsulta
+from app.backend.models import Consulta, Horario, Medico, Paciente, StatusConsulta, Usuario
 from app.backend.repositories.consulta_repository import ConsultaRepository, FiltroAgenda
 from app.backend.repositories.horario_repository import HorarioRepository
 from app.backend.repositories.notificacao_repository import NotificacaoRepository
@@ -107,6 +107,19 @@ class ConsultaService:
             consulta.data_atualizacao = self._utc_now()
         return ConsultaOut.model_validate(consulta)
 
+    def reschedule_for_patient(self, consulta_id: int, paciente_id: int, novo_horario_id: int, origem_horario_id: int) -> ConsultaOut:
+        with self._transacao():
+            consulta = self._bloquear_consulta(consulta_id)
+            if consulta.paciente_id != paciente_id:
+                raise NotFoundError("Consulta não encontrada")
+            if consulta.status != StatusConsulta.AGENDADA or consulta.horario_id != origem_horario_id:
+                raise ConflictError("A consulta mudou; confira novamente antes de confirmar")
+            if novo_horario_id == consulta.horario_id:
+                raise BusinessRuleError("Escolha um horário diferente do atual")
+            self._transferir(consulta, novo_horario_id)
+            consulta.data_atualizacao = self._utc_now()
+        return ConsultaOut.model_validate(consulta)
+
     def cancel(self, consulta_id: int, payload: ConfirmacaoConsulta) -> ConsultaOut:
         with self._transacao():
             consulta = self._bloquear_consulta(consulta_id)
@@ -146,6 +159,12 @@ class ConsultaService:
         return consulta
 
     def _ocupar(self, horario: Horario, paciente_id: int) -> None:
+        medico = self.db.get(Medico, horario.medico_id)
+        paciente = self.db.get(Paciente, paciente_id)
+        if medico is None or not medico.ativo or (medico.usuario_id and not self.db.get(Usuario, medico.usuario_id).ativo):
+            raise BusinessRuleError("Médico inativo não pode receber consultas")
+        if paciente is None or not self.db.get(Usuario, paciente.usuario_id).ativo:
+            raise BusinessRuleError("Paciente inativo não pode receber consultas")
         ocupante = self.repository.get_ativa_por_horario(horario.id)
         if ocupante and ocupante.paciente_id == paciente_id:
             raise ConflictError("Você já possui uma consulta agendada neste horário.")

@@ -1,6 +1,6 @@
 from datetime import date
 from enum import StrEnum
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -13,6 +13,7 @@ class AssistantInterpretRequest(BaseModel):
 
 class TipoAcao(StrEnum):
     AGENDAR = "agendar"
+    REMARCAR = "remarcar"
     CANCELAR = "cancelar"
     RESPONDER_SOLICITACAO = "responder_solicitacao"
 
@@ -48,19 +49,24 @@ class CriteriosAgendamento(BaseModel):
 
 class AcaoPendente(BaseModel):
     tipo: TipoAcao
-    horario_id: int | None = None
-    consulta_id: int | None = None
+    horario_id: int | None = Field(default=None, gt=0)
+    consulta_id: int | None = Field(default=None, gt=0)
     notificacao_id: int | None = None
     criterios: CriteriosAgendamento = Field(default_factory=CriteriosAgendamento)
-    recusados: list[int] = Field(default_factory=list)
+    recusados: list[int] = Field(default_factory=list, max_length=120)
     horarios_oferecidos: list[int] = Field(default_factory=list, max_length=6)
     aguardando_escolha: bool = False
+    etapa_remarcacao: Literal["origem", "destino"] | None = None
+    consultas_oferecidas: list[int] = Field(default_factory=list, max_length=6)
+    origem_horario_id: int | None = Field(default=None, gt=0)
+    pagina_consultas: int = Field(default=0, ge=0, le=1000)
 
 
 class ContextoConversa(BaseModel):
+    preferencia_estilo: Literal["automatico", "padrao", "simplificado"] = "automatico"
     acao_pendente: AcaoPendente | None = None
     probabilidade_idoso: float | None = Field(default=None, ge=0, le=1)
-    solicitacoes_vistas: list[int] = Field(default_factory=list)
+    solicitacoes_vistas: list[int] = Field(default_factory=list, max_length=120)
 
 
 class ChatRequest(BaseModel):
@@ -79,6 +85,7 @@ class HeuristicasOut(BaseModel):
 
 
 class ChatResponse(BaseModel):
+    modo_degradado: bool = False
     resposta: str
     perfil: str
     probabilidade_idoso: float

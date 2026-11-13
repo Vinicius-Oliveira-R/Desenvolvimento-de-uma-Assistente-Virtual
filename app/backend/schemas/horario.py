@@ -1,7 +1,7 @@
 from datetime import date
 from typing import Annotated
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 DATA_ISO = r"^\d{4}-\d{2}-\d{2}$"
 HORA_HHMM = r"^([01]\d|2[0-3]):[0-5]\d$"
@@ -13,6 +13,11 @@ class HorarioCreate(BaseModel):
     data: str = Field(..., pattern=DATA_ISO)
     hora_inicio: str = Field(..., pattern=HORA_HHMM)
     hora_fim: str = Field(..., pattern=HORA_HHMM)
+
+    @field_validator("data")
+    @classmethod
+    def data_real(cls, value: str) -> str:
+        return date.fromisoformat(value).isoformat()
 
     @model_validator(mode="after")
     def validar_intervalo(self) -> "HorarioCreate":
@@ -40,6 +45,11 @@ class LiberacaoDeHorarios(BaseModel):
     hora_inicio: str = Field(..., pattern=HORA_HHMM)
     hora_fim: str = Field(..., pattern=HORA_HHMM)
     duracao_minutos: int = Field(default=30, ge=10, le=240)
+
+    @field_validator("dias_semana")
+    @classmethod
+    def dias_sem_repeticao(cls, values: list[int]) -> list[int]:
+        return sorted(set(values))
 
     @model_validator(mode="after")
     def validar_periodo(self) -> "LiberacaoDeHorarios":

@@ -10,6 +10,7 @@ from app.backend.core.database import Base, engine
 from app.backend.core.exceptions import DomainError
 from app.backend.routers.assistant import router as assistant_router
 from app.backend.routers.auth import router as auth_router
+from app.backend.routers.cadastros import router as cadastros_router
 from app.backend.routers.consultas import router as consultas_router
 from app.backend.routers.horarios import router as horarios_router
 from app.backend.routers.medicos import router as medicos_router
@@ -22,6 +23,11 @@ settings = get_settings()
 @asynccontextmanager
 async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     Base.metadata.create_all(bind=engine)
+    from sqlalchemy import inspect
+    for table, required in (("usuarios", {"ativo", "token_version"}), ("medicos", {"ativo"})):
+        present = {column["name"] for column in inspect(engine).get_columns(table)}
+        if not required <= present:
+            raise RuntimeError("Schema anterior à auditoria; execute python -m app.backend.migrate --apply antes de iniciar")
     yield
 
 
@@ -43,6 +49,7 @@ async def handle_domain_error(_: Request, exc: DomainError) -> JSONResponse:
 
 ROUTERS = (
     auth_router,
+    cadastros_router,
     pacientes_router,
     medicos_router,
     horarios_router,

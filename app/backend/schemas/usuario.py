@@ -32,7 +32,7 @@ class UsuarioCreate(BaseModel):
 
 class UsuarioLogin(BaseModel):
     email: EmailStr
-    senha: str = Field(..., min_length=6)
+    senha: str = Field(..., min_length=6, max_length=BCRYPT_LIMITE_BYTES)
 
 
 class UsuarioOut(BaseModel):
@@ -42,6 +42,7 @@ class UsuarioOut(BaseModel):
     nome: str
     email: str
     papel: PapelUsuario
+    ativo: bool = True
 
 
 class SessaoOut(UsuarioOut):
@@ -59,6 +60,7 @@ class PerfilOut(UsuarioOut):
             nome=usuario.nome,
             email=usuario.email,
             papel=usuario.papel,
+            ativo=usuario.ativo,
             papeis_cadastraveis=usuario.papel.papeis_cadastraveis(),
             medico_id=usuario.medico.id if usuario.medico else None,
         )

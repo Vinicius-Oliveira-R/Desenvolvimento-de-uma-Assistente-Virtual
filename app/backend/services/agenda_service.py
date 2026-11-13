@@ -28,12 +28,12 @@ class AgendaService:
         procuradas = _palavras_do_nome(nome)
         if not procuradas:
             return []
-        return [medico for medico in self.medicos.list_all() if procuradas <= _palavras_do_nome(medico.nome)]
+        return [medico for medico in self.medicos.list_active() if procuradas <= _palavras_do_nome(medico.nome)]
 
     def find_doctors_by_specialty(self, especialidade: str) -> list[Medico]:
         catalogada = buscar_especialidade(especialidade)
         alvo = normalizar(catalogada.nome if catalogada else especialidade)
-        return [medico for medico in self.medicos.list_all() if normalizar(medico.especialidade) == alvo]
+        return [medico for medico in self.medicos.list_active() if normalizar(medico.especialidade) == alvo]
 
     def find_slot(self, medico_id: int, data: date, hora: str) -> Horario | None:
         return self.horarios.find_slot(medico_id, data.isoformat(), hora)

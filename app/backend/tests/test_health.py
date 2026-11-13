@@ -18,8 +18,10 @@ def test_root_endpoint() -> None:
     assert response.json() == {"message": "Assistente Clínico API"}
 
 
-def test_inicializacao_pre_aquece_o_classificador_do_assistente() -> None:
-    get_profile_classifier.cache_clear()
-
-    with TestClient(app):
-        assert get_profile_classifier.cache_info().currsize == 1
+def test_inicializacao_nao_depende_do_classificador(monkeypatch) -> None:
+    import app.backend.assistant.orchestrator as module
+    def broken():
+        raise RuntimeError("ML indisponível na inicialização")
+    monkeypatch.setattr(module, "get_profile_classifier", broken)
+    with TestClient(app) as running:
+        assert running.get("/health").json() == {"status": "ok"}

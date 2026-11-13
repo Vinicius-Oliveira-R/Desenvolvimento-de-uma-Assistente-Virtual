@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from sqlalchemy import ForeignKey, Index, String
+from sqlalchemy import Boolean, ForeignKey, Index, String, text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.backend.core.database import Base
@@ -11,6 +11,7 @@ class Medico(Base):
     __table_args__ = (Index("uq_medicos_usuario_id", "usuario_id", unique=True),)
 
     id: Mapped[int] = mapped_column(primary_key=True, index=True)
+    ativo: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default=text("true"))
     nome: Mapped[str] = mapped_column(String(150), nullable=False)
     crm: Mapped[str] = mapped_column(String(30), unique=True, nullable=False)
     especialidade: Mapped[str] = mapped_column(String(100), nullable=False)

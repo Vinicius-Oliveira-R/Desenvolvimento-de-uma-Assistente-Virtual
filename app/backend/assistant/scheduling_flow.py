@@ -15,6 +15,7 @@ from app.backend.assistant.especialidades import ESPECIALIDADE_PADRAO
 from app.backend.assistant.nlp import Intencao, MessageInterpreter, MensagemInterpretada
 from app.backend.assistant.scheduling_language import analyze_scheduling, normalize_schedule_text
 from app.backend.assistant.temporal import IntervaloDatas, TURNOS
+from app.backend.assistant.rescheduling import AtomicRescheduling
 from app.backend.models import Horario, Medico, Paciente
 from app.backend.schemas.assistant import AcaoPendente, CriteriosAgendamento, TipoAcao
 
@@ -50,8 +51,10 @@ class SchedulingMessageInterpreter(MessageInterpreter):
         return message
 
 
-class SchedulingDialogueManager(DialogueManager):
+class SchedulingDialogueManager(AtomicRescheduling, DialogueManager):
     """Mantém os fluxos existentes de consultas/notificações e melhora a agenda."""
+
+    page_size = PAGE_SIZE
 
     @staticmethod
     def _default_target(criteria: CriteriosAgendamento) -> CriteriosAgendamento:
@@ -60,6 +63,8 @@ class SchedulingDialogueManager(DialogueManager):
         return criteria.model_copy(update={"especialidade": ESPECIALIDADE_PADRAO})
 
     def _rotear(self, mensagem: MensagemInterpretada, paciente: Paciente) -> ResultadoDialogo:
+        if mensagem.intencao == Intencao.REMARCAR:
+            return self.start_rescheduling(paciente)
         if mensagem.intencao == Intencao.AGENDAR:
             criteria = criterios_de(mensagem.entidades)
             defaulted = not criteria.possui_alvo
@@ -71,6 +76,8 @@ class SchedulingDialogueManager(DialogueManager):
         return super()._rotear(mensagem, paciente)
 
     def _continuar(self, mensagem: MensagemInterpretada, paciente: Paciente, pendente: AcaoPendente):
+        if pendente.tipo == TipoAcao.REMARCAR:
+            return self.continue_rescheduling(mensagem, paciente, pendente)
         if pendente.tipo != TipoAcao.AGENDAR:
             return super()._continuar(mensagem, paciente, pendente)
         if mensagem.intencao in (
@@ -158,7 +165,7 @@ class SchedulingDialogueManager(DialogueManager):
         return self.agenda.next_available(
             [doctor.id for doctor in doctors],
             data_inicio=criteria.data_inicio, data_fim=criteria.data_fim,
-            hora=criteria.hora, turno=criteria.turno, excluir=rejected, limite=PAGE_SIZE,
+            hora=criteria.hora, turno=criteria.turno, excluir=rejected, limite=self.page_size,
         )
 
     def _sugerir(self, medicos: Sequence[Medico], criterios: CriteriosAgendamento, recusados: Sequence[int], aviso=None):

@@ -13,7 +13,7 @@ def _logado_como(api: ClinicaApi, papel: PapelUsuario | None) -> dict[str, str]:
     return api.criar_usuario_no_banco(f"Usuário {papel}", f"{papel}.solicitante@email.com", papel) if papel else {}
 
 
-def _dados_de_paciente(usuario_id: int, cpf: str = "12345678900") -> dict[str, object]:
+def _dados_de_paciente(usuario_id: int, cpf: str = "12345678909") -> dict[str, object]:
     return {
         "usuario_id": usuario_id,
         "nome": "Paciente Novo",
@@ -99,15 +99,15 @@ def test_cadastro_de_paciente_exige_usuario_paciente_sem_cadastro_e_cpf_inedito(
         resposta = api.client.post("/api/pacientes", headers=api.admin, json=_dados_de_paciente(usuario_id, cpf))
         return resposta.status_code
 
-    assert vincular(medico["id"], "11111111111") == 400
-    assert vincular(paciente["id"], "22222222222") == 201
-    assert vincular(paciente["id"], "33333333333") == 409
-    assert vincular(outro["id"], "22222222222") == 409
-    assert vincular(9999, "44444444444") == 404
+    assert vincular(medico["id"], "10001234560") == 400
+    assert vincular(paciente["id"], "10002469065") == 201
+    assert vincular(paciente["id"], "10003703568") == 409
+    assert vincular(outro["id"], "10002469065") == 409
+    assert vincular(9999, "10004938062") == 404
 
 
 def test_lista_de_pacientes_com_dados_pessoais_e_restrita_a_funcionarios(api: ClinicaApi) -> None:
-    headers_paciente, _ = api.cadastrar_paciente("Lurdes Andrade", "lurdes@email.com", "55555555555")
+    headers_paciente, _ = api.cadastrar_paciente("Lurdes Andrade", "lurdes@email.com", "10006172547")
 
     assert api.client.get("/api/pacientes").status_code == 401
     assert api.client.get("/api/pacientes", headers=headers_paciente).status_code == 403
