@@ -62,6 +62,15 @@ class ClinicaApi:
         return resposta.json()
 
     def cadastrar_paciente(self, nome: str, email: str, cpf: str) -> tuple[dict[str, str], int]:
+        # Fixtures históricas usavam sequências sem DV; converte apenas dados sintéticos dos testes.
+        from app.backend.core.validation import normalize_cpf
+        try:
+            cpf = normalize_cpf(cpf)
+        except ValueError:
+            base = str(100000000 + int(cpf) % 899999999)
+            for size in (10, 11):
+                base += str((sum(int(d) * w for d, w in zip(base, range(size, 1, -1))) * 10 % 11) % 10)
+            cpf = base
         usuario = self.cadastrar_usuario(nome, email)
         paciente = self.client.post(
             "/api/pacientes",

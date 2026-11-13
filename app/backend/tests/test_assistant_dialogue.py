@@ -4,7 +4,7 @@ from app.backend.tests.helpers import ClinicaApi
 
 
 def _paciente_com_agenda(api: ClinicaApi) -> tuple[dict[str, str], list[int]]:
-    headers, _ = api.cadastrar_paciente("Lurdes Andrade", "lurdes@email.com", "55555555555")
+    headers, _ = api.cadastrar_paciente("Lurdes Andrade", "lurdes@email.com", "10006172547")
     medico = api.cadastrar_medico("Dr. João Mendes", "CRM-SP-1001", "Cardiologia")
     horarios = [
         api.cadastrar_horario(medico, data, hora)
@@ -61,7 +61,7 @@ def test_paciente_lista_proximas_consultas(api: ClinicaApi) -> None:
 
 
 def _paciente_com_clinico_e_ortopedista(api: ClinicaApi) -> tuple[dict[str, str], dict[str, int]]:
-    headers, _ = api.cadastrar_paciente("Lurdes Andrade", "lurdes@email.com", "55555555555")
+    headers, _ = api.cadastrar_paciente("Lurdes Andrade", "lurdes@email.com", "10006172547")
     medicos = {
         "Clínica Geral": api.cadastrar_medico("Dra. Maria Silva", "CRM-SP-2002", "Clínica Geral"),
         "Ortopedia": api.cadastrar_medico("Dr. Carlos Lima", "CRM-SP-3003", "Ortopedia"),

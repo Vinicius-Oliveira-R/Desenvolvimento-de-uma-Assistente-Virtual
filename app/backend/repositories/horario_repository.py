@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from sqlalchemy import and_, or_
 from sqlalchemy.orm import Session
 
-from app.backend.models import Horario
+from app.backend.models import Horario, Medico, Usuario
 
 
 @dataclass(frozen=True)
@@ -53,6 +53,10 @@ class HorarioRepository:
             query = query.filter(Horario.data == data)
         if disponivel is not None:
             query = query.filter(Horario.disponivel.is_(disponivel))
+        if disponivel is True:
+            query = query.join(Medico).filter(Medico.ativo.is_(True)).filter(
+                Medico.usuario_id.is_(None) | Medico.usuario.has(Usuario.ativo.is_(True))
+            )
         return query.order_by(Horario.data, Horario.hora_inicio, Horario.id).all()
 
     def get_by_id(self, horario_id: int) -> Horario | None:

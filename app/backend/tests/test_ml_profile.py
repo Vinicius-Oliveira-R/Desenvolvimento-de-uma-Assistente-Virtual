@@ -52,11 +52,12 @@ def test_random_forest_classifica_perfis_dos_cenarios_fora_do_corpus() -> None:
 
 def test_random_forest_generaliza_em_validacao_cruzada() -> None:
     vetores, perfis = vectorize_corpus(load_corpus(), get_language_processor().process, NielsenHeuristicExtractor())
-    acuracias = cross_val_score(
+    f1_scores = cross_val_score(
         AgeProfileClassifier.build_model(),
         [vetor.as_list() for vetor in vetores],
         [str(perfil) for perfil in perfis],
         cv=StratifiedKFold(n_splits=5, shuffle=True, random_state=42),
+        scoring="f1_macro",
     )
 
-    assert acuracias.mean() >= 0.8
+    assert f1_scores.mean() >= 0.8

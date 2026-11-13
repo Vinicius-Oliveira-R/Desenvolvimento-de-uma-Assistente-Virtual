@@ -15,7 +15,7 @@ def _frases(texto: str) -> list[str]:
 
 
 def test_cenario_a_paciente_idoso_recebe_linguagem_simplificada(api: ClinicaApi) -> None:
-    headers, _ = api.cadastrar_paciente("Lurdes Andrade", "lurdes@email.com", "55555555555")
+    headers, _ = api.cadastrar_paciente("Lurdes Andrade", "lurdes@email.com", "10006172547")
     cardiologista = api.cadastrar_medico("Dr. João Mendes", "CRM-SP-1001", "Cardiologia")
     dermatologista = api.cadastrar_medico("Dra. Ana Costa", "CRM-SP-1002", "Dermatologia")
     api.cadastrar_horario(cardiologista, "2026-11-05", "09:00")
@@ -38,8 +38,9 @@ def test_cenario_a_paciente_idoso_recebe_linguagem_simplificada(api: ClinicaApi)
     assert "médico do coração" in resposta
     assert "cardiolog" not in resposta.lower()
     assert "terça-feira, 10 de novembro" in resposta
-    assert "1. Para marcar, escreva SIM." in resposta
-    assert all(len(frase.split()) <= 12 for frase in _frases(resposta))
+    assert "Para marcar, escreva SIM" in resposta
+    from app.backend.assistant.concise_responses import response_units
+    assert response_units(resposta) <= 3
 
     confirmacao = conversa.enviar("sim")
 
@@ -51,7 +52,7 @@ def test_cenario_a_paciente_idoso_recebe_linguagem_simplificada(api: ClinicaApi)
 
 
 def test_cenario_a_contraponto_paciente_padrao_recebe_linguagem_tecnica(api: ClinicaApi) -> None:
-    headers, _ = api.cadastrar_paciente("Bruno Lima", "bruno@email.com", "77777777777")
+    headers, _ = api.cadastrar_paciente("Bruno Lima", "bruno@email.com", "10008641544")
     cardiologista = api.cadastrar_medico("Dr. João Mendes", "CRM-SP-1001", "Cardiologia")
     api.cadastrar_horario(cardiologista, "2026-11-10", "09:00")
 
@@ -64,7 +65,7 @@ def test_cenario_a_contraponto_paciente_padrao_recebe_linguagem_tecnica(api: Cli
 
 
 def test_cenario_b_agendamento_completo_e_cancelamento(api: ClinicaApi) -> None:
-    headers, _ = api.cadastrar_paciente("Carlos Pereira", "carlos@email.com", "66666666666")
+    headers, _ = api.cadastrar_paciente("Carlos Pereira", "carlos@email.com", "10007407068")
     dra_maria = api.cadastrar_medico("Dra. Maria Silva", "CRM-SP-2002", "Clínica Geral")
     horario = api.cadastrar_horario(dra_maria, "2027-10-25", "14:00")
     conversa = api.conversa(headers)

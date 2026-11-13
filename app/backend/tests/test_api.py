@@ -14,7 +14,7 @@ def test_register_and_login(api: ClinicaApi) -> None:
 
 
 def test_patient_and_doctor_flow(api: ClinicaApi) -> None:
-    _, paciente_id = api.cadastrar_paciente("Paciente Teste", "paciente@email.com", "12345678900")
+    _, paciente_id = api.cadastrar_paciente("Paciente Teste", "paciente@email.com", "12345678909")
     medico_id = api.cadastrar_medico("Dr. João", "CRM-SP-1234", "Cardiologia")
     horario_id = api.cadastrar_horario(medico_id, "2026-10-10", "09:00")
 
@@ -34,7 +34,7 @@ def test_patient_and_doctor_flow(api: ClinicaApi) -> None:
 
 
 def test_consultation_conflict(api: ClinicaApi) -> None:
-    _, paciente_id = api.cadastrar_paciente("Paciente Conflito", "paciente2@email.com", "11111111111")
+    _, paciente_id = api.cadastrar_paciente("Paciente Conflito", "paciente2@email.com", "10001234560")
     medico_id = api.cadastrar_medico("Dra. Maria", "CRM-SP-4321", "Neurologia")
     horario_id = api.cadastrar_horario(medico_id, "2026-11-05", "14:00")
     consulta = {"paciente_id": paciente_id, "medico_id": medico_id, "horario_id": horario_id, "data": "2026-11-05"}
@@ -47,7 +47,7 @@ def test_consultation_conflict(api: ClinicaApi) -> None:
 
 
 def test_cancel_and_update_require_confirmation(api: ClinicaApi) -> None:
-    _, paciente_id = api.cadastrar_paciente("Paciente Confirmação", "confirmacao@email.com", "22222222222")
+    _, paciente_id = api.cadastrar_paciente("Paciente Confirmação", "confirmacao@email.com", "10002469065")
     medico_id = api.cadastrar_medico("Dr. Carlos", "CRM-SP-5555", "Dermatologia")
     horario_id = api.cadastrar_horario(medico_id, "2026-12-15", "10:00")
     consulta = {"paciente_id": paciente_id, "medico_id": medico_id, "horario_id": horario_id, "data": "2026-12-15"}
@@ -93,10 +93,11 @@ def test_cancel_and_update_require_confirmation(api: ClinicaApi) -> None:
 def test_assistant_understands_schedule_request(api: ClinicaApi) -> None:
     medico_id = api.cadastrar_medico("Dr. João", "CRM-SP-7777", "Cardiologia")
     horario_id = api.cadastrar_horario(medico_id, "2026-10-10", "09:00")
-    api.cadastrar_paciente("Paciente IA", "ia@email.com", "33333333333")
+    api.cadastrar_paciente("Paciente IA", "ia@email.com", "10003703568")
 
     response = api.client.post(
         "/api/assistant/interpret",
+        headers=api.admin,
         json={"mensagem": "Quero agendar uma consulta com Dr. João para 2026-10-10 às 09:00 para o paciente Paciente IA"},
     )
 
@@ -110,22 +111,10 @@ def test_assistant_understands_schedule_request(api: ClinicaApi) -> None:
     assert payload["slot_id"] == horario_id
 
 
-def test_assistant_can_create_consultation_from_message(api: ClinicaApi) -> None:
-    medico_id = api.cadastrar_medico("Dra. Ana", "CRM-SP-8888", "Pediatria")
-    horario_id = api.cadastrar_horario(medico_id, "2026-11-20", "15:00")
-    api.cadastrar_paciente("Maria Souza", "maria@email.com", "44444444444")
-
-    response = api.client.post(
-        "/api/assistant/agendar",
-        json={"mensagem": "Agende uma consulta com Dra. Ana para 2026-11-20 às 15:00 para Maria Souza"},
-    )
-
-    assert response.status_code == 201, response.text
-    payload = response.json()
-    assert payload["status"] == "agendada"
-    assert payload["medico_id"] == medico_id
-    assert payload["horario_id"] == horario_id
-    assert payload["observacao"] == "Agendamento realizado pelo assistente"
+def test_legacy_assistant_write_is_retired(api: ClinicaApi) -> None:
+    payload = {"mensagem": "Agende uma consulta"}
+    assert api.client.post("/api/assistant/agendar", json=payload).status_code == 401
+    assert api.client.post("/api/assistant/agendar", headers=api.admin, json=payload).status_code == 410
 
 
 def test_assistant_recommends_best_slot(api: ClinicaApi) -> None:
@@ -136,6 +125,7 @@ def test_assistant_recommends_best_slot(api: ClinicaApi) -> None:
 
     response = api.client.post(
         "/api/assistant/recomendar",
+        headers=api.admin,
         json={"mensagem": "Preciso de uma consulta de cardiologia com a maior rapidez possível"},
     )
 

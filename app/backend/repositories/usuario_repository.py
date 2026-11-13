@@ -1,3 +1,4 @@
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.backend.models import Usuario
@@ -11,7 +12,7 @@ class UsuarioRepository:
         return self.db.get(Usuario, usuario_id)
 
     def get_by_email(self, email: str) -> Usuario | None:
-        return self.db.query(Usuario).filter(Usuario.email == email).first()
+        return self.db.query(Usuario).filter(func.lower(Usuario.email) == email.strip().lower()).first()
 
     def add(self, usuario: Usuario) -> Usuario:
         self.db.add(usuario)

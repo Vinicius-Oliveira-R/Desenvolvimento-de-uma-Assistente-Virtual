@@ -27,7 +27,7 @@ def test_usuario_paciente_medico_relacionamentos(db_session: Session) -> None:
     paciente = Paciente(
         usuario_id=usuario.id,
         nome="Ana Souza",
-        cpf="12345678900",
+        cpf="12345678909",
         data_nascimento="1990-01-15",
         telefone="11999999999",
     )

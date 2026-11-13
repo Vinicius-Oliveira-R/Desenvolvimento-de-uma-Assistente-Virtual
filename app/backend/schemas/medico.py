@@ -17,3 +17,4 @@ class MedicoOut(BaseModel):
     nome: str
     crm: str
     especialidade: str
+    ativo: bool = True

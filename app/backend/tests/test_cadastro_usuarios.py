@@ -3,7 +3,7 @@ import pytest
 from app.backend.models import PapelUsuario
 from app.backend.tests.helpers import SENHA_PADRAO, ClinicaApi
 
-FICHA_PACIENTE = {"cpf": "12345678900", "data_nascimento": "1948-05-12", "telefone": "11999990000"}
+FICHA_PACIENTE = {"cpf": "12345678909", "data_nascimento": "1948-05-12", "telefone": "11999990000"}
 
 
 def _cadastrar(api: ClinicaApi, headers: dict[str, str], **dados: object) -> tuple[int, dict]:
@@ -19,7 +19,7 @@ def test_paciente_e_sua_ficha_sao_cadastrados_em_uma_unica_requisicao(api: Clini
     assert status == 201
     pacientes = api.client.get("/api/pacientes", headers=api.admin).json()
     resumo = [(p["usuario_id"], p["nome"], p["cpf"]) for p in pacientes]
-    assert resumo == [(usuario["id"], "Lurdes Andrade", "12345678900")]
+    assert resumo == [(usuario["id"], "Lurdes Andrade", "12345678909")]
 
 
 def test_cpf_repetido_nao_deixa_usuario_sem_ficha(api: ClinicaApi) -> None:

@@ -3,7 +3,7 @@ import pytest
 
 
 def prepare(api, count=3):
-    headers, _ = api.cadastrar_paciente('Pessoa de Teste', 'agenda@example.com', '55555555555')
+    headers, _ = api.cadastrar_paciente('Pessoa de Teste', 'agenda@example.com', '10006172547')
     doctor = api.cadastrar_medico('Dra. Maria Silva', 'CRM-PR-9911', 'Clínica Geral')
     slots = [api.cadastrar_horario(doctor, '2026-11-10', f'{9+i:02d}:00') for i in range(count)]
     return api.conversa(headers), slots
@@ -20,7 +20,7 @@ def test_initial_lay_request_lists_real_general_slots(api, text):
     assert response['resultado'] == 'sugestao_horario'
     pending = response['contexto']['acao_pendente']
     assert pending['criterios']['especialidade'] == 'Clínica Geral'
-    assert pending['horarios_oferecidos'] == slots
+    assert pending['horarios_oferecidos'] == slots[:2 if response['perfil'] == 'IDOSO' else 6]
     assert pending['aguardando_escolha'] is True
     assert pending['horario_id'] is None
     assert all(api.horario_disponivel(pk) for pk in slots)
@@ -45,7 +45,7 @@ def test_request_day_without_slots_offers_future_alternatives(api):
     conversation, slots = prepare(api)
     response = conversation.enviar('marcar consulta dia 05/11')
     assert response['resultado'] == 'sugestao_horario'
-    assert response['contexto']['acao_pendente']['horarios_oferecidos'] == slots
+    assert response['contexto']['acao_pendente']['horarios_oferecidos'] == slots[:2 if response['perfil'] == 'IDOSO' else 6]
     assert 'alternativas' in response['resposta']
     assert all(api.horario_disponivel(pk) for pk in slots)
 
@@ -55,7 +55,7 @@ def test_broad_question_clears_previous_empty_date(api):
     no_slots = conversation.enviar('agendar consulta dia 30/11')
     assert no_slots['resultado'] == 'sem_horarios'
     available = conversation.enviar('quais dias tem disponiveis')
-    assert available['contexto']['acao_pendente']['horarios_oferecidos'] == slots
+    assert available['contexto']['acao_pendente']['horarios_oferecidos'] == slots[:2 if available['perfil'] == 'IDOSO' else 6]
 
 
 def test_empty_agenda_does_not_invent_date_or_loop(api):
@@ -69,6 +69,7 @@ def test_empty_agenda_does_not_invent_date_or_loop(api):
 
 def test_more_options_does_not_repeat_batch(api):
     conversation, slots = prepare(api, count=8)
+    conversation.contexto['preferencia_estilo'] = 'padrao'
     first = conversation.enviar('quais dias tem')
     assert first['contexto']['acao_pendente']['horarios_oferecidos'] == slots[:6]
     second = conversation.enviar('mais horarios')
@@ -88,7 +89,7 @@ def test_doctor_name_question_keeps_only_requested_doctor(api):
     conversation, slots = prepare(api)
     response = conversation.enviar('Dra. Maria atende quando?')
     assert response['resultado'] == 'sugestao_horario'
-    assert response['contexto']['acao_pendente']['horarios_oferecidos'] == slots
+    assert response['contexto']['acao_pendente']['horarios_oferecidos'] == slots[:2 if response['perfil'] == 'IDOSO' else 6]
 
 
 def test_explicit_appointment_also_waits_for_confirmation(api):

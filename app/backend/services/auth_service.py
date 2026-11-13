@@ -32,7 +32,7 @@ class AuthService:
             usuario = self.repository.add(
                 Usuario(
                     nome=payload.nome,
-                    email=payload.email,
+                    email=str(payload.email).strip().lower(),
                     senha_hash=get_password_hash(payload.senha),
                     papel=payload.papel,
                 )
@@ -49,8 +49,8 @@ class AuthService:
 
     def login(self, payload: UsuarioLogin) -> SessaoOut:
         usuario = self.repository.get_by_email(payload.email)
-        if not usuario or not verify_password(payload.senha, usuario.senha_hash):
+        if not usuario or not usuario.ativo or not verify_password(payload.senha, usuario.senha_hash):
             raise UnauthorizedError("Credenciais inválidas")
 
-        token = create_access_token(str(usuario.id))
+        token = create_access_token(str(usuario.id), usuario.token_version)
         return SessaoOut(id=usuario.id, nome=usuario.nome, email=usuario.email, papel=usuario.papel, token=token)
