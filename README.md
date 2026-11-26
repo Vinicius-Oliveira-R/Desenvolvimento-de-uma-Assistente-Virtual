@@ -2,13 +2,16 @@
 
 Protótipo de agendamento administrativo com FastAPI, SQLAlchemy/PostgreSQL,
 Django SSR, HTTPX, HTMX, Alpine.js e Bootstrap. O PLN de intenção utiliza
-spaCy (Matcher/EntityRuler); Random Forest seleciona o estilo de resposta,
-não diagnostica doenças nem comprova idade do paciente.
+spaCy (Matcher/EntityRuler). A idade do cadastro define o estilo inicial da conversa e o
+Random Forest é apenas um sinal adicional de estilo: não diagnostica doenças nem comprova
+idade do paciente.
 
 ## Revisão da auditoria
 
 As correções e sua rastreabilidade estão em
-[docs/auditoria-codigo-20261113.md](docs/auditoria-codigo-20261113.md).
+[docs/auditoria-codigo-20261113.md](docs/auditoria-codigo-20261113.md). A revisão da conversa
+do paciente (confirmações, estilo, escolhas, retomada e login com 429) está em
+[docs/revisao-conversa-20261126.md](docs/revisao-conversa-20261126.md).
 Este é um protótipo: testes não certificam segurança, adequação clínica,
 acessibilidade, conformidade jurídica ou disponibilidade de produção.
 
@@ -101,25 +104,56 @@ mas não apaga consultas existentes nem cancela compromissos silenciosamente.
 
 ## Fluxo conversacional
 
-Pedidos genéricos buscam Clínica Geral explicitamente. Uma especialidade ou médico
-já escolhido é preservado. As opções vêm de horários futuros e disponíveis no banco;
-listar não reserva. O paciente escolhe e confirma antes da gravação.
+Pedidos genéricos buscam Clínica Geral explicitamente (se a clínica não tiver clínico
+geral, o assistente pergunta a especialidade). Uma especialidade ou médico já escolhido
+é preservado. As opções vêm de horários futuros e disponíveis no banco; listar não
+reserva. O paciente escolhe e confirma antes da gravação.
 
-O modo simplificado mostra duas opções por vez e uma instrução; o padrão pode
-mostrar seis. `MAIS HORÁRIOS` consulta as próximas vagas. Os comandos `modo simples`,
-`modo padrão` e `modo automático` mudam apenas a apresentação, sem alterar a agenda.
+**Confirmações.** Só alteram a agenda as perguntas de confirmação (marcar, trocar,
+desmarcar e responder a pedido da clínica), e só com a frase inteira de concordância
+("sim", "pode marcar", "confirmo") ou com o botão que nomeia a ação: *Confirmar horário*,
+*Confirmar troca*, *Desmarcar consulta* e *Manter minha consulta*. Perguntas e dúvidas
+("pode repetir?", "quero entender", "como assim?", "já está marcado?", "não sei")
+reapresentam a etapa sem mudar nada. Cada pergunta recebe uma proposta nova; um botão
+de uma pergunta anterior é recusado. Antes de gravar, paciente, consulta e vaga são
+conferidos de novo; um clique duplo informa a reserva já registrada em vez de criar outra.
 
-A remarcação pelo chat seleciona a consulta de origem, o destino e solicita
-confirmação. A transferência é atômica: se o destino ficar ocupado, a consulta
-original é preservada. Pedidos de alteração enviados pela equipe e notificações
-continuam disponíveis, respeitando a confirmação do paciente.
+**Escolhas.** Valem toque, número, número por extenso, ordinal e referência a um horário
+exibido ("2", "dois", "opção dois", "a segunda", "o das duas da tarde"). "Segunda" com uma
+opção 2 na tela gera uma pergunta curta (opção ou segunda-feira); dois horários iguais são
+distinguidos por data ou médico; uma opção inexistente é explicada com as opções reais.
+
+**Estilo.** A idade em anos completos é calculada no backend a partir do cadastro e só
+define a apresentação inicial: a partir de `ASSISTENTE_IDADE_PASSO_A_PASSO` (60) ou com
+data ausente/inválida, uma pergunta por vez e até duas opções; abaixo disso, o estilo
+direto (até seis). Pedidos explícitos têm prioridade — os comandos `modo simples`,
+`modo padrão` e `modo automático` continuam válidos, além de "explique melhor", "vá por
+partes", "seja mais direto" e "mostre mais horários". Um pedido de ajuda ("não entendi")
+passa ao passo a passo. O classificador Random Forest permanece como último sinal: só
+mensagens com quatro ou mais palavras contam e a troca exige evidência continuada
+(histerese), para o estilo não alternar a cada resposta curta. O paciente não escolhe
+nem vê rótulos etários, probabilidades ou o diagnóstico do classificador; a resposta da
+API informa apenas o estilo neutro (`passo_a_passo` ou `direto`) e guarda a evidência do
+classificador cifrada no contexto. Detalhes e limitações
+estão em `app/backend/assistant/communication_style.py`.
+
+**Retomada.** `/api/assistant/retomar` reapresenta a etapa pendente (revalidando a vaga)
+ao atualizar ou voltar ao chat; sem etapa, mostra *Marcar consulta*, *Minhas consultas*
+e *Mudar ou cancelar*. *Novo agendamento* encerra a proposta anterior e inicia outra
+busca, sem tocar nas consultas registradas. Se a conexão cair depois de uma confirmação,
+o chat orienta a conferir *Minhas consultas* antes de repetir.
+
+A remarcação pelo chat mostra o horário atual e o proposto e aproveita pedidos completos
+("mudar minha consulta de sexta para segunda à tarde"). A transferência é atômica: se o
+destino ficar ocupado, a consulta original é preservada. Pedidos de alteração enviados
+pela equipe e notificações continuam disponíveis, respeitando a confirmação do paciente.
 
 Rotas legadas de leitura exigem autenticação; `/api/assistant/agendar` foi retirada
 do fluxo de escrita e retorna 410 para usuário autenticado. Use `/api/assistant/chat`.
 
-Falhas de treino/predição do classificador retornam ao estilo PADRAO automático,
-sem bloquear a agenda determinística. A espera é limitada e não são criadas threads
-sem limite; preferências explícitas de comunicação continuam sendo respeitadas.
+Falhas de treino/predição do classificador não mudam o estilo definido pela idade ou
+pelo paciente e não bloqueiam a agenda determinística. A espera é limitada e não são
+criadas threads sem limite.
 
 ## Testes e evidências
 
@@ -130,6 +164,11 @@ cd app/frontend
 python manage.py test assistant --settings=setup.test_settings
 python -m unittest discover -s tests -v
 ```
+
+`assistant.test_fluxo_integrado` percorre o chat real (sessão, formulários e templates do
+Django) chamando a API FastAPI no mesmo processo, num SQLite temporário, e confere a tela e
+o banco. Ele é ignorado quando as dependências do backend não estão instaladas; o workflow
+`fluxo-paciente.yml` instala as duas e o executa.
 
 Os testes PostgreSQL somente rodam quando `TEST_POSTGRES_URL` aponta para banco
 **descartável**, pois recriam tabelas. Nunca usar a URL Neon real. O CI utiliza
