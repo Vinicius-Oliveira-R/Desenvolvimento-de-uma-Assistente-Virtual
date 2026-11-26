@@ -5,7 +5,7 @@ Os testes de concorrência em nível de banco (threads, SQL emitido e PostgreSQL
 
 import re
 
-from app.backend.tests.helpers import ClinicaApi
+from app.backend.tests.helpers import NASCIMENTO_ADULTO, ClinicaApi
 
 MENSAGEM_RESERVADO = "Este horário acabou de ser reservado por outro paciente."
 
@@ -25,12 +25,10 @@ def test_cenario_a_paciente_idoso_recebe_linguagem_simplificada(api: ClinicaApi)
 
     sugestao = conversa.enviar("queria marca consulta com cardiologista pra semana q vem se der...")
 
-    assert sugestao["perfil"] == "IDOSO"
+    assert sugestao["estilo"] == "passo_a_passo"
     assert sugestao["intencao"] == "agendar"
     assert sugestao["entidades"]["especialidade"] == "Cardiologia"
-    assert sugestao["heuristicas"]["taxa_erros"] > 0
-    assert sugestao["heuristicas"]["hesitacao"] > 0
-    assert sugestao["heuristicas"]["vagueza"] == 1.0
+    assert not {"perfil", "probabilidade_idoso", "heuristicas"} & sugestao.keys()
     assert sugestao["resultado"] == "sugestao_horario"
     assert sugestao["contexto"]["acao_pendente"]["horario_id"] == proxima_semana
 
@@ -44,7 +42,7 @@ def test_cenario_a_paciente_idoso_recebe_linguagem_simplificada(api: ClinicaApi)
 
     confirmacao = conversa.enviar("sim")
 
-    assert confirmacao["perfil"] == "IDOSO"
+    assert confirmacao["estilo"] == "passo_a_passo"
     assert confirmacao["resultado"] == "consulta_agendada"
     assert confirmacao["consulta"]["data"] == "2026-11-10"
     assert confirmacao["resposta"].startswith("Pronto! Sua consulta está marcada.")
@@ -52,20 +50,20 @@ def test_cenario_a_paciente_idoso_recebe_linguagem_simplificada(api: ClinicaApi)
 
 
 def test_cenario_a_contraponto_paciente_padrao_recebe_linguagem_tecnica(api: ClinicaApi) -> None:
-    headers, _ = api.cadastrar_paciente("Bruno Lima", "bruno@email.com", "10008641544")
+    headers, _ = api.cadastrar_paciente("Bruno Lima", "bruno@email.com", "10008641544", NASCIMENTO_ADULTO)
     cardiologista = api.cadastrar_medico("Dr. João Mendes", "CRM-SP-1001", "Cardiologia")
     api.cadastrar_horario(cardiologista, "2026-11-10", "09:00")
 
     sugestao = api.conversa(headers).enviar("Quero agendar cardiologista na próxima semana.")
 
-    assert sugestao["perfil"] == "PADRAO"
+    assert sugestao["estilo"] == "direto"
     assert sugestao["resultado"] == "sugestao_horario"
     assert "Cardiologia" in sugestao["resposta"]
     assert "10/11/2026 (terça-feira) às 09:00" in sugestao["resposta"]
 
 
 def test_cenario_b_agendamento_completo_e_cancelamento(api: ClinicaApi) -> None:
-    headers, _ = api.cadastrar_paciente("Carlos Pereira", "carlos@email.com", "10007407068")
+    headers, _ = api.cadastrar_paciente("Carlos Pereira", "carlos@email.com", "10007407068", NASCIMENTO_ADULTO)
     dra_maria = api.cadastrar_medico("Dra. Maria Silva", "CRM-SP-2002", "Clínica Geral")
     horario = api.cadastrar_horario(dra_maria, "2027-10-25", "14:00")
     conversa = api.conversa(headers)
@@ -75,7 +73,7 @@ def test_cenario_b_agendamento_completo_e_cancelamento(api: ClinicaApi) -> None:
     assert api.horario_disponivel(horario)
     agendamento = conversa.enviar("sim")
 
-    assert agendamento["perfil"] == "PADRAO"
+    assert agendamento["estilo"] == "direto"
     assert agendamento["resultado"] == "consulta_agendada"
     assert agendamento["consulta"]["medico_nome"] == "Dra. Maria Silva"
     assert (agendamento["consulta"]["data"], agendamento["consulta"]["hora_inicio"]) == ("2027-10-25", "14:00")

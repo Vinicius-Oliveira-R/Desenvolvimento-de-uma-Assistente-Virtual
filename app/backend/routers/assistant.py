@@ -10,7 +10,7 @@ from app.backend.assistant.orchestrator import ChatOrchestrator, get_profile_cla
 from app.backend.core.clock import Clock, get_clock
 from app.backend.core.database import get_db
 from app.backend.core.dependencies import get_current_user_id, get_current_user, require_admin_or_medico
-from app.backend.schemas.assistant import AssistantInterpretRequest, ChatRequest, ChatResponse
+from app.backend.schemas.assistant import AssistantInterpretRequest, ChatRequest, ChatResponse, RetomadaRequest
 from app.backend.schemas.consulta import ConsultaOut
 
 
@@ -32,6 +32,17 @@ def chat(
     clock: Clock = Depends(get_clock),
 ) -> ChatResponse:
     return ChatOrchestrator.build(db, clock).reply(usuario_id, payload)
+
+
+@router.post("/retomar", response_model=ChatResponse)
+def retomar_conversa(
+    payload: RetomadaRequest,
+    usuario_id: int = Depends(get_current_user_id),
+    db: Session = Depends(get_db),
+    clock: Clock = Depends(get_clock),
+) -> ChatResponse:
+    """Reapresenta a etapa pendente (revalidando vagas) ou a abertura; não altera a agenda."""
+    return ChatOrchestrator.build(db, clock).retomar(usuario_id, payload.contexto)
 
 
 @router.post("/interpret", dependencies=[Depends(require_admin_or_medico)])

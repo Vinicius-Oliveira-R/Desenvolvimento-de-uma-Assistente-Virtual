@@ -1,3 +1,4 @@
+import re
 import threading
 from dataclasses import dataclass, fields
 from datetime import date
@@ -14,7 +15,6 @@ from spacy.tokens import Doc, Span
 from app.backend.assistant.patterns import (
     PADROES_SINAIS,
     SINAL_AFIRMACAO,
-    SINAL_AFIRMACAO_INICIAL,
     SINAL_MENCAO_CONSULTA,
     SINAL_NEGACAO,
     SINAL_OUTRA_OPCAO,
@@ -42,6 +42,10 @@ class Intencao(StrEnum):
 INTENCOES_DE_ACAO = (Intencao.CANCELAR, Intencao.REMARCAR, Intencao.AGENDAR, Intencao.LISTAR)
 INTENCOES_DE_RESPOSTA = (Intencao.CONFIRMAR, Intencao.NEGAR)
 INTENCOES_SOCIAIS = (Intencao.SAUDACAO, Intencao.AGRADECIMENTO)
+# "Não sei" e "não entendi" pedem ajuda; não recusam a pergunta pendente.
+_NAO_E_RECUSA = re.compile(
+    r"^n(?:ao)?\s+(?:sei|entendi|entendo|compreendi|lembro|tenho certeza|estou entendendo|to entendendo)\b"
+)
 
 
 @Language.component("normalizador_pt")
@@ -94,6 +98,7 @@ class Entidades:
     periodo: IntervaloDatas | None = None
     hora: str | None = None
     turno: str | None = None
+    dia_semana: int | None = None
 
     @property
     def possui_criterios(self) -> bool:
@@ -111,6 +116,7 @@ class Entidades:
             ),
             "hora": self.hora,
             "turno": self.turno,
+            "dia_semana": self.dia_semana,
         }
 
 
@@ -125,6 +131,8 @@ class MensagemInterpretada:
     negativa: bool = False
     pede_outra_opcao: bool = False
     sem_preferencia: bool = False
+    origem: Entidades | None = None
+    destino: Entidades | None = None
 
 
 class MessageInterpreter:
@@ -140,8 +148,11 @@ class MessageInterpreter:
         palavras = [token for token in doc if not (token.is_punct or token.is_space)]
         curta = len(palavras) <= self.LIMITE_RESPOSTA_CURTA
         inicio = palavras[0].i if palavras else 0
-        afirmativa = curta and (SINAL_AFIRMACAO in sinais or inicio in sinais.get(SINAL_AFIRMACAO_INICIAL, []))
-        negativa = curta and inicio in sinais.get(SINAL_NEGACAO, [])
+        # Estes sinais só rotulam a intenção; autorizar alterações cabe ao LeitorDeRespostas.
+        afirmativa = curta and "?" not in texto and SINAL_AFIRMACAO in sinais
+        negativa = (
+            curta and inicio in sinais.get(SINAL_NEGACAO, []) and not _NAO_E_RECUSA.match(normalizar(texto).strip())
+        )
         return MensagemInterpretada(
             texto=texto,
             doc=doc,
@@ -185,6 +196,7 @@ class MessageInterpreter:
                     if data := self._resolver_data(ent):
                         valores.setdefault("data", data)
                 case "DIA_SEMANA":
+                    valores.setdefault("dia_semana", int(ent.ent_id_))
                     valores.setdefault("data", self._resolver.dia_da_semana(int(ent.ent_id_)))
                 case "PERIODO":
                     valores.setdefault("periodo", self._resolver.periodo(ent.ent_id_))
