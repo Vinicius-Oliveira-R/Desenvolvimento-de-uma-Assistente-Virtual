@@ -25,6 +25,8 @@ class Settings(BaseSettings):
     login_ip_max_attempts: int = Field(default=50, ge=5, le=1000)
     ml_timeout_seconds: float = Field(default=1.0, gt=0, le=10)
     ml_retry_seconds: float = Field(default=60.0, ge=1, le=600)
+    # A idade do cadastro só escolhe a apresentação inicial: uma pergunta por vez e até duas opções.
+    assistente_idade_passo_a_passo: int = Field(default=60, ge=0, le=130)
 
     @field_validator("secret_key")
     @classmethod
