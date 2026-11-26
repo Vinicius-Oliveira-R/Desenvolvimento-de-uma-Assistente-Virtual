@@ -4,21 +4,18 @@
 
 {% block content %}
 <div class="chat-container">
-    <div id="chat-feed" class="chat-feed">
-        <!-- Mensagem de Boas-Vindas Inicial -->
-        <div class="chat-bubble assistant">
-            <div class="avatar"><i class="bi bi-robot"></i></div>
-            <div class="message-content">
-                Olá! Sou o seu Assistente Clínico. Como posso ajudar com o seu agendamento hoje?
-            </div>
-        </div>
+    <h1 class="visually-hidden">Assistente de consultas</h1>
+    <div id="chat-feed" class="chat-feed" role="region" aria-label="Conversa com o assistente" tabindex="0">
+        {% include "assistant/partials/mensagem_item.html" with user_message=inicio.user_message bot_response=inicio.bot_response opcoes=inicio.opcoes diagnostico=inicio.diagnostico %}
     </div>
 
-    <div id="digitando" class="htmx-indicator chat-typing">
+    {# Só a resposta mais recente é anunciada, sem o leitor de tela reler a conversa inteira. #}
+    <div id="anuncio" class="visually-hidden" role="status" aria-live="polite" aria-atomic="true"></div>
+
+    <div id="digitando" class="htmx-indicator chat-typing" aria-hidden="true">
         <i class="bi bi-three-dots me-1"></i> Assistente digitando...
     </div>
 
-    <!-- Campo de Entrada HTMX -->
     <div class="chat-input-container">
         <form id="chat-form"
               class="chat-form"
@@ -28,17 +25,83 @@
               hx-swap="beforeend"
               hx-indicator="#digitando"
               hx-disabled-elt="#chat-form button"
-              hx-on::after-request="this.reset(); document.getElementById('chat-feed').scrollTop = document.getElementById('chat-feed').scrollHeight;">
+              hx-on::after-request="if (event.detail.successful) { this.reset(); }">
             {% csrf_token %}
-            <textarea name="message"
-                      placeholder="Digite sua mensagem aqui..."
+            <label for="mensagem" class="visually-hidden">Escreva sua mensagem para o assistente</label>
+            <textarea id="mensagem"
+                      name="message"
+                      placeholder="Escreva aqui, por exemplo: quero marcar consulta"
                       maxlength="500"
+                      rows="1"
                       required
+                      aria-describedby="dica-teclado"
                       @keydown.enter="if (!$event.shiftKey) { $event.preventDefault(); $el.form.requestSubmit(); }"></textarea>
             <button type="submit" class="btn-send" aria-label="Enviar mensagem">
-                <i class="bi bi-send-fill"></i>
+                <i class="bi bi-send-fill" aria-hidden="true"></i>
             </button>
         </form>
+        <p id="dica-teclado" class="visually-hidden">
+            Enter envia a mensagem e Shift mais Enter pula linha. As respostas rápidas aparecem como botões antes deste campo.
+        </p>
     </div>
 </div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+    const feed = document.getElementById("chat-feed");
+    const anuncio = document.getElementById("anuncio");
+
+    function atualizarConversa(anunciar) {
+        const respostas = Array.from(feed.querySelectorAll("[data-resposta]"));
+        const ultima = respostas[respostas.length - 1];
+        const validas = respostas.filter(function (resposta) { return !resposta.hasAttribute("data-falha"); });
+        const atual = validas[validas.length - 1];
+        // Só os botões da resposta mais recente ficam ativos; um aviso de falha de conexão não os
+        // invalida. Os anteriores continuam visíveis e o backend também os recusa.
+        respostas.forEach(function (resposta) {
+            if (resposta !== atual) {
+                resposta.querySelectorAll(".chat-opcoes button").forEach(function (botao) { botao.disabled = true; });
+            }
+        });
+        if (anunciar && ultima) {
+            anuncio.textContent = "";
+            window.setTimeout(function () {
+                anuncio.textContent = ultima.querySelector(".message-text").innerText;
+            }, 60);
+        }
+        feed.scrollTop = feed.scrollHeight;
+    }
+
+    function avisarFalhaDeConexao(evento) {
+        const xhr = evento.detail.xhr;
+        if (xhr && xhr.getResponseHeader("HX-Redirect")) {
+            return;
+        }
+        const aviso = document.createElement("div");
+        aviso.className = "chat-bubble assistant";
+        aviso.setAttribute("data-resposta", "");
+        aviso.setAttribute("data-falha", "");
+        aviso.innerHTML = '<div class="avatar" aria-hidden="true"><i class="bi bi-robot"></i></div>'
+            + '<div class="message-content"><div class="message-text">'
+            + "A conexão caiu. Se você tinha confirmado algo, confira em Minhas consultas antes de repetir."
+            + '</div><div class="chat-opcoes"><a class="btn-opcao" href="{% url 'calendario' %}">Minhas consultas</a></div></div>';
+        feed.appendChild(aviso);
+        atualizarConversa(true);
+    }
+
+    // afterSettle ocorre depois de o HTMX reativar os botões desativados durante o envio.
+    document.body.addEventListener("htmx:afterSettle", function (evento) {
+        // O evento também sobe de cada balão inserido; só o disparado no próprio feed conta.
+        if (evento.target === feed) {
+            atualizarConversa(true);
+        }
+    });
+    document.body.addEventListener("htmx:sendError", avisarFalhaDeConexao);
+    document.body.addEventListener("htmx:timeout", avisarFalhaDeConexao);
+    document.body.addEventListener("htmx:responseError", avisarFalhaDeConexao);
+    atualizarConversa(false);
+})();
+</script>
 {% endblock %}

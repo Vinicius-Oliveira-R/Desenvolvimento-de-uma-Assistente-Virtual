@@ -1,10 +1,10 @@
 {% extends 'base.html' %}
 
-{% block title %}Meus Agendamentos - Assistente Clínico{% endblock %}
+{% block title %}Minhas consultas - Assistente Clínico{% endblock %}
 
 {% block content %}
 <div class="container py-4 calendario">
-    <h3 class="mb-4"><i class="bi bi-calendar3 me-2"></i> Meus Agendamentos</h3>
+    <h1 class="h3 mb-4"><i class="bi bi-calendar3 me-2" aria-hidden="true"></i> Minhas consultas</h1>
 
     {% if erro %}
         <div class="alert alert-warning" role="alert">{{ erro }}</div>
@@ -14,6 +14,7 @@
         <div class="card-header">Próximas consultas</div>
         <div class="card-body p-0">
             {% if proximas %}
+                <div class="table-responsive">
                 <table class="table table-hover mb-0 align-middle">
                     <thead>
                         <tr><th>Data</th><th>Horário</th><th>Médico</th><th>Especialidade</th><th>Status</th></tr>
@@ -30,6 +31,7 @@
                         {% endfor %}
                     </tbody>
                 </table>
+                </div>
             {% else %}
                 <p class="text-secondary p-3 mb-0">
                     Você não tem consultas agendadas. <a href="{% url 'chat' %}">Fale com o assistente</a> para marcar.
@@ -42,6 +44,7 @@
         <div class="card border-secondary">
             <div class="card-header">Histórico</div>
             <div class="card-body p-0">
+                <div class="table-responsive">
                 <table class="table mb-0 align-middle text-secondary">
                     <tbody>
                         {% for consulta in historico %}
@@ -55,6 +58,7 @@
                         {% endfor %}
                     </tbody>
                 </table>
+                </div>
             </div>
         </div>
     {% endif %}

@@ -13,7 +13,16 @@ from django.utils import timezone
 from django.views import View
 from django.views.generic import TemplateView
 
-from assistant.api_client import ApiError, ConsultaAgendada, HorarioLivre, PermissaoNegadaError, RespostaAssistente
+from assistant.api_client import (
+    ApiError,
+    ApiResultadoIncertoError,
+    ApiSemConexaoError,
+    ConsultaAgendada,
+    HorarioLivre,
+    OpcaoDeResposta,
+    PermissaoNegadaError,
+    RespostaAssistente,
+)
 from assistant.forms import (
     AgendamentoForm,
     CadastroUsuarioForm,
@@ -59,15 +68,37 @@ class DashboardRedirectView(ClinicaApiMixin, View):
         return redirect(pagina_inicial(self.papel))
 
 
+ABERTURA_SEM_API = "Olá! O que você quer fazer? Toque em uma opção abaixo."
+OPCOES_DE_ABERTURA = (
+    OpcaoDeResposta("marcar_consulta", "Marcar consulta"),
+    OpcaoDeResposta("minhas_consultas", "Minhas consultas"),
+    OpcaoDeResposta("mudar_ou_cancelar", "Mudar ou cancelar"),
+)
+
+
 class ChatView(ClinicaApiMixin, TemplateView):
     template_name = "assistant/chat.html"
     partial_template_name = "assistant/partials/mensagem_item.html"
     resposta_api_indisponivel = (
         "Não consegui falar com o sistema de agendamento agora. Tente de novo em alguns instantes."
     )
+    resposta_sem_conexao = (
+        "Não consegui falar com o sistema de agendamento agora. Nada foi alterado. Tente de novo em alguns instantes."
+    )
+    resposta_incerta = (
+        "A conexão caiu antes da resposta e não sei se o seu pedido foi registrado. "
+        "Antes de repetir, confira em Minhas consultas."
+    )
 
     async def get(self, request: HttpRequest, *args, **kwargs) -> HttpResponse:
-        return self.render_to_response(self.get_context_data(**kwargs))
+        """Atualizar ou voltar ao chat reapresenta a etapa pendente, sem voltar à saudação."""
+        sessao = SessaoAssistente(request.session)
+        abertura = await sessao.retirar_abertura()
+        if abertura is not None:
+            inicio = {"user_message": abertura["mensagem"], **self._troca(RespostaAssistente.from_json(abertura["resposta"]))}
+        else:
+            inicio = await self._retomar(sessao)
+        return self.render_to_response(self.get_context_data(inicio=inicio, **kwargs))
 
     async def post(self, request: HttpRequest, *args, **kwargs) -> HttpResponse:
         form = MensagemForm(request.POST)
@@ -75,22 +106,64 @@ class ChatView(ClinicaApiMixin, TemplateView):
             return HttpResponse(status=204)
 
         sessao = SessaoAssistente(request.session)
+        contexto = await sessao.contexto()
         mensagem = form.cleaned_data["message"]
         try:
-            resposta = await self.get_api_client().send_message(self.token, mensagem, await sessao.contexto())
-        except ApiError:
-            return self._render_troca(mensagem, self.resposta_api_indisponivel)
+            resposta = await self.get_api_client().send_message(self.token, mensagem, contexto, form.acao_do_botao())
+        except ApiError as exc:
+            return self._render_falha(mensagem, exc, contexto)
 
         await sessao.salvar_contexto(resposta.contexto)
-        return self._render_troca(mensagem, resposta.texto, resposta)
+        return TemplateResponse(request, self.partial_template_name, {"user_message": mensagem, **self._troca(resposta)})
 
-    def _render_troca(self, mensagem: str, texto: str, resposta: RespostaAssistente | None = None) -> TemplateResponse:
-        contexto = {
-            "user_message": mensagem,
-            "bot_response": texto,
-            "diagnostico": resposta if settings.ASSISTENTE_EXIBIR_DIAGNOSTICO else None,
+    async def _retomar(self, sessao: SessaoAssistente) -> dict:
+        try:
+            resposta = await self.get_api_client().resume_conversation(self.token, await sessao.contexto())
+        except ApiError:
+            return {"bot_response": ABERTURA_SEM_API, "opcoes": OPCOES_DE_ABERTURA}
+        await sessao.salvar_contexto(resposta.contexto)
+        return self._troca(resposta)
+
+    def _render_falha(self, mensagem: str, erro: ApiError, contexto: dict) -> TemplateResponse:
+        confirmando = bool((contexto.get("acao_pendente") or {}).get("confirmacao_pendente"))
+        incerto = isinstance(erro, ApiResultadoIncertoError) and confirmando
+        if incerto:
+            texto = self.resposta_incerta
+        elif isinstance(erro, ApiSemConexaoError):
+            texto = self.resposta_sem_conexao
+        else:
+            texto = self.resposta_api_indisponivel
+        contexto_da_troca = {"user_message": mensagem, "bot_response": texto, "conferir_consultas": incerto, "falha": True}
+        return TemplateResponse(self.request, self.partial_template_name, contexto_da_troca)
+
+    @staticmethod
+    def _troca(resposta: RespostaAssistente) -> dict:
+        # O diagnóstico técnico mostra só intenção e resultado do diálogo, nunca perfil ou probabilidade.
+        diagnostico = {"intencao": resposta.intencao, "resultado": resposta.resultado}
+        return {
+            "bot_response": resposta.texto,
+            "opcoes": resposta.opcoes,
+            "diagnostico": diagnostico if settings.ASSISTENTE_EXIBIR_DIAGNOSTICO else None,
         }
-        return TemplateResponse(self.request, self.partial_template_name, contexto)
+
+
+class NovoAgendamentoView(ClinicaApiMixin, View):
+    """Encerra a proposta anterior e inicia outra busca; consultas já registradas não mudam."""
+
+    rotulo = "Novo agendamento"
+
+    async def post(self, request: HttpRequest, *args, **kwargs) -> HttpResponse:
+        sessao = SessaoAssistente(request.session)
+        contexto = await sessao.encerrar_proposta()
+        try:
+            resposta = await self.get_api_client().send_message(
+                self.token, self.rotulo, contexto, {"codigo": "marcar_consulta"}
+            )
+        except ApiError:
+            return redirect("chat")
+        await sessao.salvar_contexto(resposta.contexto)
+        await sessao.guardar_abertura(self.rotulo, resposta.para_sessao())
+        return redirect("chat")
 
 
 class CalendarioView(ClinicaApiMixin, TemplateView):
@@ -447,7 +520,8 @@ class ResponderNotificacaoView(NotificacoesView):
             await self.get_api_client().respond_notification(self.token, notificacao_id, aceitar)
         except ApiError as exc:
             return await self.listar(request, erro=exc.mensagem)
-        return await self.listar(request, resultado="Resposta registrada." if aceitar else "Pedido recusado.")
+        mensagem = "Resposta registrada." if aceitar else "Pedido recusado. Sua consulta foi mantida."
+        return await self.listar(request, resultado=mensagem)
 
 
 class ContagemNotificacoesView(ClinicaApiMixin, View):

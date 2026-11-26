@@ -5,25 +5,46 @@ from fastapi.testclient import TestClient
 
 from app.backend.core.database import SessionLocal
 from app.backend.core.security import create_access_token, get_password_hash
-from app.backend.models import PapelUsuario, Usuario
+from app.backend.models import Consulta, PapelUsuario, Usuario
 
 SENHA_PADRAO = "senha123"
+# Datas fictícias: a idade do cadastro escolhe só a apresentação inicial do chat.
+NASCIMENTO_IDOSO = "1950-03-10"
+NASCIMENTO_ADULTO = "1995-06-15"
 _HASH_SENHA_PADRAO = get_password_hash(SENHA_PADRAO)
 
 
 class Conversa:
+    """Reproduz o front-end: o contexto devolvido pela API volta na mensagem seguinte."""
+
     def __init__(self, client: TestClient, headers: dict[str, str]):
         self._client = client
         self._headers = headers
         self.contexto: dict[str, Any] = {}
+        self.ultima: dict[str, Any] = {}
 
-    def enviar(self, mensagem: str) -> dict[str, Any]:
-        resposta = self._client.post(
-            "/api/assistant/chat", headers=self._headers, json={"mensagem": mensagem, "contexto": self.contexto}
+    def enviar(self, mensagem: str, acao: dict[str, Any] | None = None) -> dict[str, Any]:
+        corpo = {"mensagem": mensagem, "contexto": self.contexto, **({"acao": acao} if acao else {})}
+        return self._registrar(self._client.post("/api/assistant/chat", headers=self._headers, json=corpo))
+
+    def tocar(self, codigo: str, valor: str | None = None, em: dict[str, Any] | None = None) -> dict[str, Any]:
+        """Toca um botão exibido numa resposta (a última, por padrão), com a proposta que ele carrega."""
+        origem = em or self.ultima
+        botao = next(
+            opcao for opcao in origem["opcoes"] if opcao["codigo"] == codigo and valor in (None, opcao["valor"])
         )
+        acao = {"codigo": botao["codigo"], "proposta": botao["proposta"], "valor": botao["valor"]}
+        return self.enviar(botao["rotulo"], acao)
+
+    def retomar(self) -> dict[str, Any]:
+        resposta = self._client.post("/api/assistant/retomar", headers=self._headers, json={"contexto": self.contexto})
+        return self._registrar(resposta)
+
+    def _registrar(self, resposta) -> dict[str, Any]:
         assert resposta.status_code == 200, resposta.text
         corpo = resposta.json()
         self.contexto = corpo["contexto"]
+        self.ultima = corpo
         return corpo
 
 
@@ -61,7 +82,9 @@ class ClinicaApi:
         assert resposta.status_code == 201, resposta.text
         return resposta.json()
 
-    def cadastrar_paciente(self, nome: str, email: str, cpf: str) -> tuple[dict[str, str], int]:
+    def cadastrar_paciente(
+        self, nome: str, email: str, cpf: str, nascimento: str = NASCIMENTO_IDOSO
+    ) -> tuple[dict[str, str], int]:
         # Fixtures históricas usavam sequências sem DV; converte apenas dados sintéticos dos testes.
         from app.backend.core.validation import normalize_cpf
         try:
@@ -79,7 +102,7 @@ class ClinicaApi:
                 "usuario_id": usuario["id"],
                 "nome": nome,
                 "cpf": cpf,
-                "data_nascimento": "1950-03-10",
+                "data_nascimento": nascimento,
                 "telefone": "11999990000",
             },
         )
@@ -109,3 +132,15 @@ class ClinicaApi:
 
     def conversa(self, headers: dict[str, str]) -> Conversa:
         return Conversa(self.client, headers)
+
+    def agendar_pela_recepcao(self, paciente_id: int, medico_id: int, horario_id: int, data: str) -> int:
+        corpo = {"paciente_id": paciente_id, "medico_id": medico_id, "horario_id": horario_id, "data": data}
+        resposta = self.client.post("/api/consultas", headers=self.admin, json=corpo)
+        assert resposta.status_code == 201, resposta.text
+        return resposta.json()["id"]
+
+    @staticmethod
+    def consultas_no_banco() -> list[tuple[int, int, str]]:
+        """(id, horario_id, status) de todas as consultas, lidas direto do banco de teste."""
+        with SessionLocal() as db:
+            return [(c.id, c.horario_id, c.status) for c in db.query(Consulta).order_by(Consulta.id)]

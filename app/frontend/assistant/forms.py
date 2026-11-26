@@ -7,9 +7,10 @@ from django import forms
 from django.contrib.auth.forms import AuthenticationForm
 from django.core.exceptions import ValidationError
 
-from assistant.api_client import ApiError, HorarioLivre, MedicoResumo, PacienteResumo
+from assistant.api_client import ApiError, HorarioLivre, MedicoResumo, MuitasTentativasError, PacienteResumo
 from assistant.perfis import PACIENTE, ROTULOS
 from assistant.login_diagnostics import log_login_failure
+from assistant.retry_after import mensagem_de_espera
 
 
 class LoginForm(AuthenticationForm):
@@ -24,13 +25,35 @@ class LoginForm(AuthenticationForm):
     def clean(self):
         try:
             return super().clean()
+        except MuitasTentativasError as exc:
+            # Limite de tentativas não é indisponibilidade: informa a espera, sem tentar de novo sozinho.
+            log_login_failure(exc, exc.status_code)
+            raise ValidationError(mensagem_de_espera(exc.espera_segundos), code="muitas_tentativas") from exc
         except ApiError as exc:
             log_login_failure(exc, exc.status_code)
             raise ValidationError(self.error_messages["api_indisponivel"], code="api_indisponivel") from exc
 
 
+CODIGOS_DE_BOTAO = (
+    "confirmar_horario", "confirmar_troca", "desmarcar_consulta", "manter_consulta", "nao_marcar", "outro_horario",
+    "escolher", "buscar_dia", "buscar_horarios", "mudar_horario", "desmarcar_esta", "marcar_consulta",
+    "minhas_consultas", "mudar_ou_cancelar",
+)
+
+
 class MensagemForm(forms.Form):
+    """Texto livre ou botão; o backend valida os dois com as mesmas regras da pergunta pendente."""
+
     message = forms.CharField(max_length=500, strip=True)
+    acao = forms.ChoiceField(choices=[(codigo, codigo) for codigo in CODIGOS_DE_BOTAO], required=False)
+    proposta = forms.RegexField(regex=r"^[A-Za-z0-9_-]{4,32}$", required=False)
+    valor = forms.RegexField(regex=r"^[0-9-]{1,20}$", required=False)
+
+    def acao_do_botao(self) -> dict[str, str] | None:
+        dados = self.cleaned_data
+        if not dados.get("acao"):
+            return None
+        return {"codigo": dados["acao"], **{campo: dados[campo] for campo in ("proposta", "valor") if dados.get(campo)}}
 
 
 class CadastroUsuarioForm(forms.Form):

@@ -30,7 +30,6 @@ PALAVRAS_FORA_DE_NOME = (
 )
 
 SINAL_AFIRMACAO = "AFIRMACAO"
-SINAL_AFIRMACAO_INICIAL = "AFIRMACAO_INICIAL"
 SINAL_NEGACAO = "NEGACAO"
 SINAL_OUTRA_OPCAO = "OUTRA_OPCAO"
 SINAL_MENCAO_CONSULTA = "MENCAO_CONSULTA"
@@ -115,9 +114,12 @@ PADROES_SINAIS: dict[str, list[Padrao]] = {
     "remarcar": [
         [_alguma("remarcar", "remarca", "remarque", "reagendar", "reagenda", "reagende", "remarcacao", "reagendamento")],
         [
-            _alguma("trocar", "troca", "mudar", "muda", "alterar", "altera"),
-            {**_alguma("o", "a", "de", "da", "do"), "OP": "?"},
-            _alguma("dia", "data", "horario", "hora"),
+            _alguma(
+                "trocar", "troca", "troque", "mudar", "muda", "mude", "alterar", "altera", "altere",
+                "passar", "transferir", "adiar", "adia", "antecipar", "antecipa",
+            ),
+            {**_alguma("o", "a", "de", "da", "do", "minha", "meu", "essa", "esse", "esta", "este"), "OP": "*"},
+            _alguma("dia", "data", "horario", "hora", "consulta", "agendamento", "marcacao"),
         ],
     ],
     "agendar": [
@@ -151,7 +153,6 @@ PADROES_SINAIS: dict[str, list[Padrao]] = {
         "sim", "s", "confirmo", "confirmar", "confirma", "confirmado", "ok", "okay", "certo", "isso", "claro",
         "perfeito", "beleza", "blz", "aceito", "positivo", "combinado", "fechado", "otimo",
     )]],
-    SINAL_AFIRMACAO_INICIAL: [[_alguma("pode", "quero", "bora")]],
     SINAL_NEGACAO: [[_alguma("nao", "n", "negativo", "desisto", "deixa")]],
     SINAL_OUTRA_OPCAO: [
         [_alguma("outro", "outra", "outros", "outras")],

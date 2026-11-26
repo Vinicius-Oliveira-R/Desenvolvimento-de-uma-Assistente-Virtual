@@ -1,10 +1,10 @@
 import pytest
 
-from app.backend.tests.helpers import ClinicaApi
+from app.backend.tests.helpers import NASCIMENTO_ADULTO, NASCIMENTO_IDOSO, ClinicaApi
 
 
 def _paciente_com_agenda(api: ClinicaApi) -> tuple[dict[str, str], list[int]]:
-    headers, _ = api.cadastrar_paciente("Lurdes Andrade", "lurdes@email.com", "10006172547")
+    headers, _ = api.cadastrar_paciente("Lurdes Andrade", "lurdes@email.com", "10006172547", NASCIMENTO_ADULTO)
     medico = api.cadastrar_medico("Dr. João Mendes", "CRM-SP-1001", "Cardiologia")
     horarios = [
         api.cadastrar_horario(medico, data, hora)
@@ -60,8 +60,10 @@ def test_paciente_lista_proximas_consultas(api: ClinicaApi) -> None:
     assert "12/11/2026 às 14:00 — Dr. João Mendes (Cardiologia)" in resposta["resposta"]
 
 
-def _paciente_com_clinico_e_ortopedista(api: ClinicaApi) -> tuple[dict[str, str], dict[str, int]]:
-    headers, _ = api.cadastrar_paciente("Lurdes Andrade", "lurdes@email.com", "10006172547")
+def _paciente_com_clinico_e_ortopedista(
+    api: ClinicaApi, nascimento: str = NASCIMENTO_IDOSO
+) -> tuple[dict[str, str], dict[str, int]]:
+    headers, _ = api.cadastrar_paciente("Lurdes Andrade", "lurdes@email.com", "10006172547", nascimento)
     medicos = {
         "Clínica Geral": api.cadastrar_medico("Dra. Maria Silva", "CRM-SP-2002", "Clínica Geral"),
         "Ortopedia": api.cadastrar_medico("Dr. Carlos Lima", "CRM-SP-3003", "Ortopedia"),
@@ -85,11 +87,11 @@ def test_pedido_sem_especialidade_mostra_clinico_geral_sem_pergunta(api: Clinica
 
 
 def test_paciente_padrao_tambem_recebe_vagas_de_clinica_geral(api: ClinicaApi) -> None:
-    headers, horarios = _paciente_com_clinico_e_ortopedista(api)
+    headers, horarios = _paciente_com_clinico_e_ortopedista(api, NASCIMENTO_ADULTO)
     resposta = api.conversa(headers).enviar("Quero agendar uma consulta para amanhã às 10h, por favor.")
     assert resposta["resultado"] == "sugestao_horario"
     assert resposta["contexto"]["acao_pendente"]["criterios"]["especialidade"] == "Clínica Geral"
-    assert "alternativas" in resposta["resposta"]
+    assert "fora do período pedido" in resposta["resposta"]
     assert api.horario_disponivel(horarios["Clínica Geral"])
 
 
@@ -148,12 +150,12 @@ def test_pergunta_de_especialidade_respeita_desistencia_e_mudanca_de_assunto(
 
 
 def test_pedido_de_remedio_do_paciente_padrao_e_bloqueado_e_vira_oferta_de_consulta(api: ClinicaApi) -> None:
-    headers, horarios = _paciente_com_clinico_e_ortopedista(api)
+    headers, horarios = _paciente_com_clinico_e_ortopedista(api, NASCIMENTO_ADULTO)
     conversa = api.conversa(headers)
 
     recusa = conversa.enviar("Estou com dor de cabeça, qual remédio eu devo tomar?")
 
-    assert recusa["perfil"] == "PADRAO"
+    assert recusa["estilo"] == "direto"
     assert recusa["intencao"] == "orientacao_medica"
     assert recusa["resultado"] == "orientacao_medica_bloqueada"
     assert recusa["resposta"] == (
@@ -176,7 +178,7 @@ def test_pedido_de_remedio_do_paciente_idoso_e_recusado_com_linguagem_simples_e_
     sugestao = conversa.enviar("sim")
     confirmacao = conversa.enviar("sim")
 
-    assert recusa["perfil"] == "IDOSO"
+    assert recusa["estilo"] == "passo_a_passo"
     assert recusa["resultado"] == "orientacao_medica_bloqueada"
     assert "Não posso indicar remédios nem dizer qual é a doença." in recusa["resposta"]
     assert sugestao["contexto"]["acao_pendente"]["horario_id"] == horarios["Clínica Geral"]
@@ -187,11 +189,14 @@ def test_pedido_de_remedio_do_paciente_idoso_e_recusado_com_linguagem_simples_e_
 def test_pedido_de_remedio_no_meio_de_um_agendamento_e_bloqueado_sem_marcar_nada(api: ClinicaApi) -> None:
     headers, horarios = _paciente_com_clinico_e_ortopedista(api)
     conversa = api.conversa(headers)
-    conversa.enviar("quero marcar uma consulta para ver minha dor nas costas")
+    proposta = conversa.enviar("quero marcar uma consulta para ver minha dor nas costas")
 
     resposta = conversa.enviar("qual remédio eu tomo até lá?")
 
-    assert resposta["resultado"] == "orientacao_medica_bloqueada"
+    # O limite é explicado e o agendamento em curso continua aberto, sem nada marcado.
+    assert resposta["intencao"] == "orientacao_medica"
+    assert "Não posso indicar remédios" in resposta["resposta"]
+    assert resposta["contexto"]["acao_pendente"] == proposta["contexto"]["acao_pendente"]
     assert api.horario_disponivel(horarios["Ortopedia"])
 
 

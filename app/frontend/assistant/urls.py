@@ -15,6 +15,7 @@ from .views import (
     LiberarHorariosView,
     NotificacoesView,
     NovaConsultaView,
+    NovoAgendamentoView,
     ResponderNotificacaoView,
     SituacaoConsultaView,
 )
@@ -24,6 +25,7 @@ urlpatterns = [
     path('gestao/pacientes/<int:paciente_id>/contato/', ContatoPacienteView.as_view(), name='editar_contato'),
     path('gestao/profissionais/', ProfissionaisView.as_view(), name='profissionais'),
     path('', ChatView.as_view(), name='chat'),
+    path('novo-agendamento/', NovoAgendamentoView.as_view(), name='novo_agendamento'),
     path('calendario/', CalendarioView.as_view(), name='calendario'),
     path('inicio/', DashboardRedirectView.as_view(), name='inicio'),
     path('medico/agenda/', AgendaMedicaView.as_view(), name='agenda_medica'),

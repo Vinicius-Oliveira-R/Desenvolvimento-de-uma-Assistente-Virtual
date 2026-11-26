@@ -15,10 +15,19 @@ from assistant.session import SessaoAssistente
 HTMX = {"HTTP_HX_REQUEST": "true"}
 RESPOSTA_CHAT = {
     "resposta": "Achei um horário com o médico do coração.\n1. Para marcar, escreva SIM.",
-    "perfil": "IDOSO",
+    "estilo": "passo_a_passo",
     "intencao": "agendar",
     "resultado": "sugestao_horario",
-    "contexto": {"acao_pendente": {"tipo": "agendar", "horario_id": 7}, "probabilidade_idoso": 0.96},
+    "opcoes": [],
+    "contexto": {"acao_pendente": {"tipo": "agendar", "horario_id": 7}, "estilo": "passo_a_passo"},
+}
+RESPOSTA_ABERTURA = {
+    "resposta": "Olá! O que você quer fazer?",
+    "estilo": "passo_a_passo",
+    "intencao": "retomada",
+    "resultado": "saudacao",
+    "opcoes": [{"codigo": "marcar_consulta", "rotulo": "Marcar consulta", "proposta": None, "valor": None}],
+    "contexto": {"estilo": "passo_a_passo"},
 }
 
 
@@ -610,16 +619,19 @@ AVISO = {"id": 12, "consulta_id": 5, "tipo": "aviso", "status": "pendente", "cri
 
 
 class NotificacoesTests(ApiFalsaMixin, TestCase):
-    def test_modal_lista_pedidos_com_aceitar_e_recusar_e_avisos_com_ciente(self) -> None:
+    def test_modal_nomeia_a_acao_do_pedido_e_avisos_com_ciente(self) -> None:
         self.autenticar()
-        self.usar_api(_api_da_equipe({"GET /api/notificacoes": (200, [PEDIDO, AVISO])}))
+        cancelamento = {**PEDIDO, "id": 13, "tipo": "cancelamento_pendente", "mensagem": "Recepção pediu para cancelar."}
+        self.usar_api(_api_da_equipe({"GET /api/notificacoes": (200, [PEDIDO, cancelamento, AVISO])}))
 
         resposta = self.client.get(reverse("notificacoes_pendentes"), **HTMX)
 
         self.assertContains(resposta, "Recepção pediu para remarcar sua consulta")
-        self.assertContains(resposta, "Aceitar")
-        self.assertContains(resposta, "Recusar", count=1)
+        self.assertContains(resposta, "Confirmar troca", count=1)
+        self.assertContains(resposta, "Desmarcar consulta", count=1)
+        self.assertContains(resposta, "Manter minha consulta", count=2)
         self.assertContains(resposta, "Ciente")
+        self.assertNotContains(resposta, "Aceitar")
         self.assertContains(resposta, reverse("responder_notificacao", args=[11]))
 
     def test_resposta_vai_para_a_api_e_o_contador_e_avisado(self) -> None:
@@ -655,6 +667,7 @@ class NotificacoesTests(ApiFalsaMixin, TestCase):
 
     def test_barra_lateral_tem_o_sino_de_notificacoes(self) -> None:
         self.autenticar()
+        self.usar_api(lambda _: httpx.Response(200, json=RESPOSTA_ABERTURA))
 
         resposta = self.client.get(reverse("chat"))
 

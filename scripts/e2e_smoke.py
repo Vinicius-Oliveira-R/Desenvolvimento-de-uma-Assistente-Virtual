@@ -67,7 +67,7 @@ class PacienteNoNavegador:
 
     @staticmethod
     def _texto_do_assistente(fragmento: str) -> str:
-        bolha = fragmento.split('class="chat-bubble assistant">', 1)[1]
+        bolha = re.search(r'<div class="message-text">(.*?)</div>', fragmento, re.DOTALL).group(1)
         bolha = re.sub(r"<br\s*/?>", "\n", bolha)
         linhas = (html.unescape(re.sub(r"<[^>]+>", "", linha)).strip() for linha in bolha.splitlines())
         return "\n".join(linha for linha in linhas if linha)
@@ -84,9 +84,12 @@ def cenario_a(frontend: str) -> None:
     lurdes = PacienteNoNavegador(frontend, "lurdes@clinica.com")
 
     sugestao = lurdes.enviar("queria marca consulta com cardiologista pra semana q vem se der...")
-    verificar("Perfil: IDOSO" in sugestao, "Random Forest classifica o perfil como IDOSO")
+    verificar(not any(rotulo in sugestao for rotulo in ("IDOSO", "PADRAO", "Perfil")), "paciente não vê rótulo etário")
     verificar("médico do coração" in sugestao and "cardiolog" not in sugestao.lower(), "resposta sem termos técnicos")
-    verificar("1. Para marcar, escreva SIM." in sugestao, "orientação passo a passo")
+    if "escreva o número" in sugestao:
+        sugestao = lurdes.enviar("1")
+    verificar("Para marcar, escreva SIM" in sugestao, "orientação passo a passo, ainda sem marcar")
+    verificar("Sua consulta está marcada" not in lurdes.enviar("pode repetir?"), "dúvida não marca a consulta")
 
     verificar("Pronto! Sua consulta está marcada." in lurdes.enviar("sim"), "consulta agendada após confirmação")
     verificar("Dr. João Mendes" in lurdes.calendario(), "consulta visível em /calendario/")
@@ -108,8 +111,10 @@ def cenario_b(frontend: str, api: httpx.Client) -> None:
             if h["medico_id"] == dra_maria["id"] and h["data"] == alvo.isoformat() and h["hora_inicio"] == "14:00"
         )
 
-    agendamento = carlos.enviar("Quero agendar consulta com Dra. Maria dia 25/10 às 14h")
-    verificar("Perfil: PADRAO" in agendamento, "perfil classificado como PADRAO")
+    proposta = carlos.enviar("Quero agendar consulta com Dra. Maria dia 25/10 às 14h")
+    verificar(not any(rotulo in proposta for rotulo in ("IDOSO", "PADRAO", "Perfil")), "paciente não vê rótulo etário")
+    verificar("A consulta ainda não foi marcada." in proposta, "proposta aguarda confirmação")
+    agendamento = carlos.enviar("sim")
     verificar("Consulta agendada com Dra. Maria Silva" in agendamento, "consulta cadastrada")
     verificar(f"{alvo:%d/%m/%Y}" in carlos.calendario(), f"consulta de {alvo:%d/%m/%Y} visível em /calendario/")
     verificar(not horario_disponivel(), "horário marcado como ocupado no banco")

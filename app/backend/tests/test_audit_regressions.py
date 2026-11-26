@@ -128,7 +128,7 @@ def test_manager_controls_active_state_without_erasing_history(api):
     assert api.client.patch(f'/api/cadastros/medicos/{doctor}', headers=manager, json={'ativo': False}).status_code == 200
     patient, _ = api.cadastrar_paciente('Pessoa', 'active@example.com', '00000000001')
     reply = api.conversa(patient).enviar('marcar consulta')
-    assert reply['resultado'] == 'sem_horarios'
+    assert reply['resultado'] == 'sem_profissional'
     with SessionLocal() as db:
         assert db.get(Horario, slot) is not None
     assert api.client.patch(f'/api/cadastros/medicos/{doctor}', headers=manager, json={'ativo': True}).status_code == 200
@@ -246,8 +246,9 @@ def test_ml_failure_keeps_agenda_available(api, monkeypatch, caplog, kind):
     doctor = api.cadastrar_medico('Dra. Teste', 'CRM-PR-126', 'Clínica Geral')
     slot = api.cadastrar_horario(doctor, '2026-11-10', '09:00')
     conversation = api.conversa(patient)
-    result = conversation.enviar('marcar consulta')
-    assert result['perfil'] == 'PADRAO' and result['modo_degradado'] is True
+    # Mensagem longa o bastante para consultar o classificador; a falha não muda o estilo inicial.
+    result = conversation.enviar('quero marcar uma consulta com clinico geral por favor')
+    assert result['estilo'] == 'passo_a_passo' and result['modo_degradado'] is True
     assert result['resultado'] == 'sugestao_horario'
     assert conversation.enviar('sim')['resultado'] == 'consulta_agendada'
     assert not api.horario_disponivel(slot)
@@ -283,12 +284,12 @@ def test_simple_style_has_at_most_three_units_and_pages_without_loss(api):
     seen = []
     for request in ('marcar consulta', 'mais horários', 'mais horários'):
         result = conversation.enviar(request)
-        assert result['perfil'] == 'IDOSO'
+        assert result['estilo'] == 'passo_a_passo'
         assert response_units(result['resposta']) <= 3, result['resposta']
         seen += result['contexto']['acao_pendente']['horarios_oferecidos']
     assert seen == slots
     assert all(api.horario_disponivel(pk) for pk in slots)
-    assert conversation.enviar('modo padrão')['perfil'] == 'PADRAO'
+    assert conversation.enviar('modo padrão')['estilo'] == 'direto'
 
 
 def test_atomic_rescheduling_by_patient_preserves_old_until_confirm(api):

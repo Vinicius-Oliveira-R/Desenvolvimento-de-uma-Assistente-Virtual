@@ -1,0 +1,47 @@
+name: Patient chat flows (Django + FastAPI)
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'app/frontend/**'
+      - 'app/backend/**'
+      - '.github/workflows/fluxo-paciente.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: fluxo-paciente-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  integrated:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: app/frontend
+    env:
+      # Valores exclusivos de CI; a API usa SQLite temporário criado pelo próprio teste.
+      DJANGO_SECRET_KEY: ci-only-not-for-production-83109ed6ca047f3423c9f021a17e2202
+      DJANGO_DEBUG: 'false'
+      DJANGO_ALLOWED_HOSTS: localhost,127.0.0.1
+      DJANGO_CSRF_TRUSTED_ORIGINS: ''
+      DATABASE_URL: postgresql://ci:ci@127.0.0.1/frontend_ci?sslmode=require
+      FASTAPI_BASE_URL: https://api.example.test/api
+      FASTAPI_TIMEOUT: '30'
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: '3.12'
+      - name: Install backend and frontend dependencies
+        run: python -m pip install -r ../backend/requirements.txt -r requirements.txt
+      - name: Check dependency consistency
+        run: python -m pip check
+      - name: Patient flows through Django session and FastAPI routes
+        run: python manage.py test assistant.test_fluxo_integrado --settings=setup.test_settings --verbosity=2

@@ -10,7 +10,8 @@ class LoginDeploymentRegressionTests(ApiFalsaMixin, TestCase):
     credentials = {"username": "user@example.com", "password": "private-test-password"}
 
     def test_api_http_failures_are_logged_without_response_body(self):
-        for status in (302, 404, 429, 500, 503):
+        # 429 tem mensagem própria (test_login_tentativas.py); aqui ficam as falhas reais de disponibilidade.
+        for status in (302, 404, 500, 503):
             with self.subTest(status=status):
                 self.usar_api(lambda _, code=status: httpx.Response(code, text="private-response-token"))
                 with self.assertLogs("assistant.login", level="WARNING") as logs:
