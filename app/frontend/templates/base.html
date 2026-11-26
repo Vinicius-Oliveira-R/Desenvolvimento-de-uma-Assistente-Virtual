@@ -19,10 +19,19 @@
     {% block extra_css %}{% endblock %}
 </head>
 <body>
-    <div class="app-container">
+    <a class="skip-link" href="#conteudo">Ir para o conteúdo</a>
+    <div class="app-container" x-data="{ menuAberto: false }">
         {% block sidebar %}
-        <!-- Sidebar estilo ChatGPT/Claude -->
-        <aside class="sidebar" x-data="{ openDropdown: false }">
+        {# No celular o menu fica recolhido e, ao abrir, empurra o conteúdo em vez de cobrir o chat. #}
+        <header class="mobile-topbar">
+            <span class="mobile-brand"><i class="bi bi-heart-pulse me-2" aria-hidden="true"></i>Assistente Clínico</span>
+            <button type="button" class="btn-menu" aria-controls="menu-lateral" :aria-expanded="menuAberto.toString()"
+                    aria-expanded="false" @click="menuAberto = !menuAberto">
+                <i class="bi bi-list me-1" aria-hidden="true"></i><span x-text="menuAberto ? 'Fechar menu' : 'Menu'">Menu</span>
+            </button>
+        </header>
+        <aside id="menu-lateral" class="sidebar" :class="{ 'aberta': menuAberto }" x-data="{ openDropdown: false }"
+               aria-label="Menu principal">
             {% if area_da_equipe %}
             <div class="sidebar-header">
                 <a href="{% url 'cadastro_usuario' %}" class="btn btn-new-chat">
@@ -59,9 +68,12 @@
             </nav>
             {% else %}
             <div class="sidebar-header">
-                <a href="{% url 'chat' %}" class="btn btn-new-chat">
-                    <i class="bi bi-plus-lg me-2"></i> Novo Agendamento
-                </a>
+                <form method="post" action="{% url 'novo_agendamento' %}">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-new-chat">
+                        <i class="bi bi-plus-lg me-2" aria-hidden="true"></i> Novo agendamento
+                    </button>
+                </form>
             </div>
 
             <nav class="sidebar-nav">
@@ -70,7 +82,7 @@
                 </a>
                 <a href="{% url 'meus_dados' %}" class="nav-item"><i class="bi bi-person me-2"></i>Meus dados</a>
                 <a href="{% url 'calendario' %}" class="nav-item {% if request.resolver_match.url_name == 'calendario' %}active{% endif %}">
-                    <i class="bi bi-calendar3 me-2"></i> Meus Agendamentos
+                    <i class="bi bi-calendar3 me-2"></i> Minhas consultas
                 </a>
                 <button type="button" class="nav-item border-0 bg-transparent w-100 text-start" data-bs-toggle="modal"
                         data-bs-target="#modal-notificacoes" hx-get="{% url 'notificacoes_pendentes' %}" hx-target="#conteudo-notificacoes">
@@ -124,7 +136,7 @@
         {% endblock %}
 
         <!-- Área Principal de Conteúdo -->
-        <main class="main-content">
+        <main id="conteudo" class="main-content" tabindex="-1">
             {% block content %}{% endblock %}
         </main>
     </div>

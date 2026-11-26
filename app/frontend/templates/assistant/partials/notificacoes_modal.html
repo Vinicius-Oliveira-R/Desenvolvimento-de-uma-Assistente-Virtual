@@ -20,14 +20,16 @@
                 {% csrf_token %}
                 <input type="hidden" name="aceitar" value="sim">
                 <button type="submit" class="btn btn-sm btn-accent">
-                    {% if notificacao.acao_necessaria %}<i class="bi bi-check-lg me-1"></i>Aceitar{% else %}Ciente{% endif %}
+                    {% if not notificacao.acao_necessaria %}Ciente
+                    {% elif notificacao.e_cancelamento %}<i class="bi bi-check-lg me-1" aria-hidden="true"></i>Desmarcar consulta
+                    {% else %}<i class="bi bi-check-lg me-1" aria-hidden="true"></i>Confirmar troca{% endif %}
                 </button>
             </form>
             {% if notificacao.acao_necessaria %}
                 <form hx-post="{% url 'responder_notificacao' notificacao.id %}" hx-target="#conteudo-notificacoes">
                     {% csrf_token %}
                     <input type="hidden" name="aceitar" value="nao">
-                    <button type="submit" class="btn btn-sm btn-outline-danger"><i class="bi bi-x-lg me-1"></i>Recusar</button>
+                    <button type="submit" class="btn btn-sm btn-outline-light">Manter minha consulta</button>
                 </form>
             {% endif %}
         </div>

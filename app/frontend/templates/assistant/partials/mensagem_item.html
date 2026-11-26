@@ -1,20 +1,37 @@
-<!-- Mensagem enviada pelo Usuário -->
+{% if user_message %}
 <div class="chat-bubble user">
-    <div class="avatar"><i class="bi bi-person-fill"></i></div>
-    <div class="message-content">
-        {{ user_message }}
-    </div>
+    <div class="avatar" aria-hidden="true"><i class="bi bi-person-fill"></i></div>
+    <div class="message-content"><span class="visually-hidden">Você: </span>{{ user_message }}</div>
 </div>
+{% endif %}
 
-<!-- Resposta gerada pela IA / Assistente -->
-<div class="chat-bubble assistant">
-    <div class="avatar"><i class="bi bi-robot"></i></div>
+<div class="chat-bubble assistant" data-resposta{% if falha %} data-falha{% endif %}>
+    <div class="avatar" aria-hidden="true"><i class="bi bi-robot"></i></div>
     <div class="message-content">
-        {{ bot_response|linebreaksbr }}
-        {% if diagnostico %}
-        <div class="message-meta">
-            Perfil: {{ diagnostico.perfil }} · Intenção: {{ diagnostico.intencao }} · Resultado: {{ diagnostico.resultado }}
+        <span class="visually-hidden">Assistente: </span>
+        <div class="message-text">{{ bot_response|linebreaksbr }}</div>
+        {% if opcoes %}
+        <div class="chat-opcoes" role="group" aria-label="Respostas rápidas">
+            {% for opcao in opcoes %}
+            <form class="chat-opcao" hx-post="{% url 'chat' %}" hx-target="#chat-feed" hx-swap="beforeend"
+                  hx-indicator="#digitando" hx-disabled-elt=".chat-opcoes button">
+                {% csrf_token %}
+                <input type="hidden" name="message" value="{{ opcao.rotulo }}">
+                <input type="hidden" name="acao" value="{{ opcao.codigo }}">
+                {% if opcao.proposta %}<input type="hidden" name="proposta" value="{{ opcao.proposta }}">{% endif %}
+                {% if opcao.valor %}<input type="hidden" name="valor" value="{{ opcao.valor }}">{% endif %}
+                <button type="submit" class="btn-opcao">{{ opcao.rotulo }}</button>
+            </form>
+            {% endfor %}
         </div>
+        {% endif %}
+        {% if conferir_consultas %}
+        <div class="chat-opcoes">
+            <a class="btn-opcao" href="{% url 'calendario' %}">Minhas consultas</a>
+        </div>
+        {% endif %}
+        {% if diagnostico %}
+        <div class="message-meta">Intenção: {{ diagnostico.intencao }} · Resultado: {{ diagnostico.resultado }}</div>
         {% endif %}
     </div>
 </div>

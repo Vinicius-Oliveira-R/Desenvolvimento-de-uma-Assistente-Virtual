@@ -6,6 +6,7 @@ import httpx
 from django.conf import settings
 
 from assistant.login_diagnostics import validate_login_payload
+from assistant.retry_after import segundos_de_espera
 
 
 class ApiError(Exception):
@@ -17,6 +18,20 @@ class ApiError(Exception):
 
 class ApiIndisponivelError(ApiError):
     pass
+
+
+class ApiSemConexaoError(ApiIndisponivelError):
+    """A requisição não chegou à API: nada pode ter sido alterado."""
+
+
+class ApiResultadoIncertoError(ApiIndisponivelError):
+    """A requisição saiu, mas a resposta não chegou: uma confirmação pode ter sido registrada."""
+
+
+class MuitasTentativasError(ApiError):
+    def __init__(self, espera_segundos: int | None):
+        super().__init__("Muitas tentativas de entrada.", 429)
+        self.espera_segundos = espera_segundos
 
 
 class CredenciaisInvalidasError(ApiError):
@@ -70,16 +85,35 @@ class PacienteResumo:
 
 
 @dataclass(frozen=True)
+class OpcaoDeResposta:
+    codigo: str
+    rotulo: str
+    proposta: str | None = None
+    valor: str | None = None
+
+    @classmethod
+    def from_json(cls, dados: dict[str, Any]) -> "OpcaoDeResposta":
+        return cls(dados["codigo"], dados["rotulo"], dados.get("proposta"), dados.get("valor"))
+
+
+@dataclass(frozen=True)
 class RespostaAssistente:
+    """Somente o que o paciente pode ver; rótulos ou probabilidades de perfil nunca são lidos."""
+
     texto: str
-    perfil: str
     intencao: str
     resultado: str
     contexto: dict[str, Any]
+    opcoes: tuple[OpcaoDeResposta, ...] = ()
 
     @classmethod
     def from_json(cls, dados: dict[str, Any]) -> "RespostaAssistente":
-        return cls(dados["resposta"], dados["perfil"], dados["intencao"], dados["resultado"], dados["contexto"])
+        opcoes = tuple(OpcaoDeResposta.from_json(opcao) for opcao in dados.get("opcoes") or ())
+        return cls(dados["resposta"], dados["intencao"], dados["resultado"], dados["contexto"], opcoes)
+
+    def para_sessao(self) -> dict[str, Any]:
+        opcoes = [vars(opcao) for opcao in self.opcoes]
+        return {"resposta": self.texto, "intencao": self.intencao, "resultado": self.resultado, "contexto": {}, "opcoes": opcoes}
 
 
 @dataclass(frozen=True)
@@ -171,10 +205,15 @@ class Notificacao:
     id: int
     mensagem: str
     acao_necessaria: bool
+    tipo: str = "aviso"
 
     @classmethod
     def from_json(cls, dados: dict[str, Any]) -> "Notificacao":
-        return cls(dados["id"], dados["mensagem"], dados["acao_necessaria"])
+        return cls(dados["id"], dados["mensagem"], dados["acao_necessaria"], dados.get("tipo", "aviso"))
+
+    @property
+    def e_cancelamento(self) -> bool:
+        return self.tipo == "cancelamento_pendente"
 
 
 class ClinicaApiClient:
@@ -195,6 +234,9 @@ class ClinicaApiClient:
             raise ApiIndisponivelError("API de agendamento indisponível.") from exc
         if resposta.status_code in (401, 422):
             raise CredenciaisInvalidasError("Credenciais inválidas.", resposta.status_code)
+        if resposta.status_code == 429:
+            # Não repete a autenticação: só informa quanto esperar, se a API disser.
+            raise MuitasTentativasError(segundos_de_espera(resposta.headers.get("Retry-After")))
         if not resposta.is_success:
             raise ApiIndisponivelError("API de agendamento indisponível.", resposta.status_code)
         try:
@@ -203,8 +245,14 @@ class ClinicaApiClient:
             raise ApiIndisponivelError("Resposta de autenticação inválida.", resposta.status_code) from exc
         return SessaoApi(dados["token"], dados["nome"], dados["email"], dados["papel"])
 
-    async def send_message(self, token: str, mensagem: str, contexto: dict[str, Any]) -> RespostaAssistente:
-        dados = await self._requisitar("POST", "/assistant/chat", token, json={"mensagem": mensagem, "contexto": contexto})
+    async def send_message(
+        self, token: str, mensagem: str, contexto: dict[str, Any], acao: dict[str, str] | None = None
+    ) -> RespostaAssistente:
+        corpo = {"mensagem": mensagem, "contexto": contexto, **({"acao": acao} if acao else {})}
+        return RespostaAssistente.from_json(await self._requisitar("POST", "/assistant/chat", token, json=corpo))
+
+    async def resume_conversation(self, token: str, contexto: dict[str, Any]) -> RespostaAssistente:
+        dados = await self._requisitar("POST", "/assistant/retomar", token, json={"contexto": contexto})
         return RespostaAssistente.from_json(dados)
 
     async def list_my_appointments(self, token: str) -> list[ConsultaResumo]:
@@ -281,8 +329,10 @@ class ClinicaApiClient:
                 headers={"Authorization": f"Bearer {token}"},
             ) as cliente:
                 resposta = await cliente.request(metodo, caminho, **opcoes)
+        except (httpx.ConnectError, httpx.ConnectTimeout, httpx.PoolTimeout) as exc:
+            raise ApiSemConexaoError("API de agendamento indisponível.") from exc
         except httpx.HTTPError as exc:
-            raise ApiIndisponivelError("API de agendamento indisponível.") from exc
+            raise ApiResultadoIncertoError("A API não respondeu depois do envio.") from exc
         if resposta.status_code == 401:
             raise SessaoExpiradaError("Sessão expirada na API.")
         self._verificar(resposta)
@@ -298,5 +348,7 @@ class ClinicaApiClient:
             detalhe = resposta.text
         if isinstance(detalhe, list):
             detalhe = "; ".join(str(erro.get("msg", erro)) for erro in detalhe)
+        if resposta.status_code >= 500:
+            raise ApiResultadoIncertoError(str(detalhe), resposta.status_code)
         erro = PermissaoNegadaError if resposta.status_code == 403 else ApiError
         raise erro(str(detalhe), resposta.status_code)
